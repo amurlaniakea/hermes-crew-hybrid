@@ -180,6 +180,32 @@ def invoke_crew_task(
         output_dir = f"/tmp/crew_output_{os.getpid()}"
     os.makedirs(output_dir, exist_ok=True)
     
+    # ── MCP Core Defense: Auditar herramientas antes de ejecutar ──────────────
+    mcp_audit_result = None
+    try:
+        from mcp_tool_auditor import MCPToolAuditor
+        auditor = MCPToolAuditor(sensitivity="medium")
+        
+        # Recolectar todas las herramientas del crew
+        all_tools = []
+        for member in crew:
+            tools = member.get("tools", [])
+            for tool in tools:
+                if isinstance(tool, str):
+                    all_tools.append({"name": tool, "description": ""})
+                elif isinstance(tool, dict):
+                    all_tools.append(tool)
+        
+        if all_tools:
+            mcp_audit_result = auditor.audit_tools_list(all_tools)
+            if not mcp_audit_result["all_safe"]:
+                print(f"[MCP AUDIT] {mcp_audit_result['tools_rejected']} tools rejected!")
+                for r in mcp_audit_result["results"]:
+                    if not r["safe"]:
+                        print(f"  ✗ {r['tool_name']}: {r['reason']}")
+    except Exception as e:
+        print(f"[MCP AUDIT] Error: {e}")
+    
     # Generar script CrewAI con el LLM embebido
     agents_def, tasks_def, agents_list, tasks_list = [], [], [], []
     for i, member in enumerate(crew):
@@ -250,6 +276,7 @@ def invoke_crew_task(
     return {
         "status": "success" if exec_result.get("returncode", 0) == 0 else "error",
         "execution_mode": execution_mode,
+        "mcp_audit": mcp_audit_result,
         "raw_output": raw_output,
         "security": security_result,
         "output_file": str(output_file) if output_file.exists() else None,
