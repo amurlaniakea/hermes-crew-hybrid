@@ -11,12 +11,7 @@ Soporta dos modos de ejecución:
 - "docker": ejecuta en contenedor Docker aislado (más seguro, más lento)
 - "auto": elige automáticamente basado en recursos disponibles
 
-Flujo:
-    1. Hermes llama invoke_crew_task() con la tarea y los roles
-    2. Se genera un script Python temporal con la estructura CrewAI
-    3. Se ejecuta en venv local O Docker (según mode)
-    4. El output pasa por Agent Fixer Stage (security gateway)
-    5. Hermes recibe el resultado limpio
+Configuración LLM: Ollama local (modelo configurable)
 """
 
 import json
@@ -27,34 +22,56 @@ from datetime import datetime
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Configuración del modelo Ollama
+# ────────────────────────────────────────────────────────────────────────────
+
+OLLAMA_MODEL = "qwen2.5:0.5b"  # Cambiar a "batiai/gemma4-e2b:q4" cuando funcione
+OLLAMA_BASE_URL = "http://localhost:11434"
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Template del script CrewAI
 # ────────────────────────────────────────────────────────────────────────────
 
 CREW_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
 """Auto-generated crew script — {timestamp}"""
+import os
 import sys
 sys.path.insert(0, "/output")
 
-from crewai import Agent, Task, Crew
+# Configure Ollama
+os.environ["OPENAI_API_BASE"] = "{ollama_base_url}/v1"
+os.environ["OPENAI_API_KEY"] = "ollama"
+
+from crewai import Agent, Task, Crew, LLM
+
+# Create LLM
+llm = LLM(model="ollama/{ollama_model}", base_url="{ollama_base_url}")
+
+# ── Agents ──────────────────────────────────────────────────────────────────
 
 {agents_def}
 
+# ── Tasks ───────────────────────────────────────────────────────────────────
+
 {tasks_def}
 
-crew = Crew(
-    agents=[{agents_list}],
-    tasks=[{tasks_list}],
-    verbose=False
-)
+# ── Crew ────────────────────────────────────────────────────────────────────
+
+crew = Crew(agents=[{agents_list}], tasks=[{tasks_list}], verbose=False)
+
+# ── Execute ─────────────────────────────────────────────────────────────────
 
 result = crew.kickoff()
 
-output_path = "/output/result.md"
+# ── Write output ────────────────────────────────────────────────────────────
+
+output_path = "{output_dir}/result.md"
 with open(output_path, "w", encoding="utf-8") as f:
     f.write(str(result))
 
-print(f"[CREW] Output written to {{output_path}}")
-print(f"[CREW] Result length: {{len(str(result))}} chars")
+print("[CREW] Done. Output: " + output_path)
+print("[CREW] Content: " + str(result)[:200])
 '''
 
 
@@ -67,48 +84,34 @@ def _determine_execution_mode(preferred: str) -> str:
     if preferred in ("venv", "docker"):
         return preferred
     
-    # Auto-detect
-    # 1. Check RAM (need at least 2GB free for Docker)
     ram_ok = True
     try:
         with open("/proc/meminfo") as f:
             for line in f:
                 if "MemAvailable" in line:
-                    available_kb = int(line.split()[1])
-                    ram_ok = available_kb > 2_000_000  # 2GB
+                    ram_ok = int(line.split()[1]) > 2_000_000
                     break
     except:
         pass
     
-    # 2. Check Docker
     docker_ok = False
     try:
-        docker_check = subprocess.run(
-            ["docker", "info"], capture_output=True, timeout=5
-        )
-        if docker_check.returncode == 0:
-            img_check = subprocess.run(
-                ["docker", "images", "-q", "hermes-crew:latest"],
-                capture_output=True, text=True, timeout=5
-            )
-            docker_ok = img_check.stdout.strip() != ""
+        dc = subprocess.run(["docker", "info"], capture_output=True, timeout=5)
+        if dc.returncode == 0:
+            img = subprocess.run(["docker", "images", "-q", "hermes-crew:latest"], capture_output=True, text=True, timeout=5)
+            docker_ok = img.stdout.strip() != ""
     except:
         pass
     
-    # 3. Check venv
     venv_ok = False
     try:
-        venv_python = "/home/sil/mcp-core-defense/venv/bin/python3"
-        if Path(venv_python).exists():
-            check = subprocess.run(
-                [venv_python, "-c", "import crewai; print('ok')"],
-                capture_output=True, text=True, timeout=10
-            )
-            venv_ok = check.returncode == 0
+        vp = "/home/sil/mcp-core-defense/venv/bin/python3"
+        if Path(vp).exists():
+            ck = subprocess.run([vp, "-c", "import crewai; print('ok')"], capture_output=True, text=True, timeout=10)
+            venv_ok = ck.returncode == 0
     except:
         pass
     
-    # 4. Decisión
     if docker_ok and ram_ok:
         return "docker"
     elif venv_ok:
@@ -119,26 +122,22 @@ def _determine_execution_mode(preferred: str) -> str:
         return "venv"
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# Ejecutores
-# ────────────────────────────────────────────────────────────────────────────
-
 def _execute_in_venv(script_path: str, output_dir: str, timeout: int) -> dict:
-    """Ejecuta el script de CrewAI en el venv local."""
-    venv_python = "/home/sil/mcp-core-defense/venv/bin/python3"
+    """Ejecuta el script de CrewAI en el venv local con output sin buffer."""
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     result = subprocess.run(
-        [venv_python, script_path],
+        ["/home/sil/mcp-core-defense/venv/bin/python3", "-u", script_path],
         capture_output=True, text=True, timeout=timeout,
-        cwd=output_dir
+        cwd=output_dir, env=env
     )
     return {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
 
 
 def _execute_in_docker(script_path: str, output_dir: str, timeout: int) -> dict:
     """Ejecuta el script de CrewAI en un contenedor Docker aislado."""
-    container_name = f"crew_{os.getpid()}"
     result = subprocess.run(
-        ["docker", "run", "--rm", "--name", container_name,
+        ["docker", "run", "--rm", "--name", f"crew_{os.getpid()}",
          "-v", f"{script_path}:/crew.py:ro", "-v", f"{output_dir}:/output",
          "--network", "none", "--memory", "512m", "--cpus", "1.0", "--read-only",
          "hermes-crew:latest", "python", "/crew.py"],
@@ -181,21 +180,23 @@ def invoke_crew_task(
         output_dir = f"/tmp/crew_output_{os.getpid()}"
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generar script CrewAI
+    # Generar script CrewAI con el LLM embebido
     agents_def, tasks_def, agents_list, tasks_list = [], [], [], []
     for i, member in enumerate(crew):
         role = member["role"]
         goal = member["goal"]
         tools = member.get("tools", [])
         backstory = member.get("backstory", f"Expert {role}")
-        
-        agents_def.append(f'agent_{i} = Agent(role="{role}", goal="{goal}", backstory="{backstory}", tools={tools}, verbose=False, allow_delegation=False)')
+        agents_def.append(f'agent_{i} = Agent(role="{role}", goal="{goal}", backstory="{backstory}", tools={tools}, verbose=False, allow_delegation=False, llm=llm)')
         agents_list.append(f"agent_{i}")
         tasks_def.append(f'task_{i} = Task(description="{goal}", agent=agent_{i}, expected_output="Detailed result")')
         tasks_list.append(f"task_{i}")
     
     script = CREW_SCRIPT_TEMPLATE.format(
         timestamp=datetime.now().isoformat(),
+        ollama_model=OLLAMA_MODEL,
+        ollama_base_url=OLLAMA_BASE_URL,
+        output_dir=output_dir,
         agents_def="\n".join(agents_def),
         tasks_def="\n".join(tasks_def),
         agents_list=", ".join(agents_list),
@@ -208,7 +209,7 @@ def invoke_crew_task(
     
     # Determinar modo y ejecutar
     execution_mode = _determine_execution_mode(mode)
-    print(f"[CREW] Mode: {execution_mode}")
+    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}")
     
     if execution_mode == "docker":
         exec_result = _execute_in_docker(script_path, output_dir, timeout)
