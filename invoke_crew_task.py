@@ -40,13 +40,16 @@ import sys
 sys.path.insert(0, "/output")
 
 # Configure Ollama
-os.environ["OPENAI_API_BASE"] = "{ollama_base_url}/v1"
+os.environ["OPENAI_API_BASE"] = "http://localhost:11434/v1"
 os.environ["OPENAI_API_KEY"] = "ollama"
 
 from crewai import Agent, Task, Crew, LLM
 
 # Create LLM
 llm = LLM(model="ollama/{ollama_model}", base_url="{ollama_base_url}")
+
+# Import tools if needed
+{tools_import}
 
 # ── Agents ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +73,7 @@ output_path = "{output_dir}/result.md"
 with open(output_path, "w", encoding="utf-8") as f:
     f.write(str(result))
 
-print("[CREW] Done. Output: " + output_path)
+print("[CREW] Done. Output written to " + output_path)
 print("[CREW] Content: " + str(result)[:200])
 '''
 
@@ -206,14 +209,52 @@ def invoke_crew_task(
     except Exception as e:
         print(f"[MCP AUDIT] Error: {e}")
     
-    # Generar script CrewAI con el LLM embebido
-    agents_def, tasks_def, agents_list, tasks_list = [], [], [], []
+    # Generar script CrewAI con el LLM embebido y herramientas reales
+    agents_def, tasks_def, agents_list, tools_import_lines, tasks_list = [], [], [], [], []
+    
+    # Mapeo de nombres de herramientas a clases
+    tool_class_map = {
+        "web_search": "WebSearchTool",
+        "file_read": "FileReadTool", 
+        "file_write": "FileWriteTool",
+        "obsidian_search": "ObsidianSearchTool",
+        "obsidian_read": "ObsidianReadTool",
+    }
+    
+    # Generar imports de herramientas usadas
+    all_tool_classes = set()
+    for member in crew:
+        for tool in member.get("tools", []):
+            if isinstance(tool, str) and tool in tool_class_map:
+                all_tool_classes.add(tool_class_map[tool])
+    
+    if all_tool_classes:
+        tools_import_lines.append("from crewai_tools import " + ", ".join(sorted(all_tool_classes)))
+    else:
+        tools_import_lines.append("# No tools imported")
+    
+    tools_import = "\n".join(tools_import_lines)
+    
+    # Generar agentes con herramientas instanciadas
     for i, member in enumerate(crew):
         role = member["role"]
         goal = member["goal"]
         tools = member.get("tools", [])
         backstory = member.get("backstory", f"Expert {role}")
-        agents_def.append(f'agent_{i} = Agent(role="{role}", goal="{goal}", backstory="{backstory}", tools={tools}, verbose=False, allow_delegation=False, llm=llm)')
+        
+        # Generar lista de herramientas instanciadas
+        tool_instances = []
+        for tool in tools:
+            if isinstance(tool, str) and tool in tool_class_map:
+                tool_instances.append(f"{tool_class_map[tool]}()")
+            elif isinstance(tool, dict):
+                # Herramienta personalizada
+                tool_name = tool.get("name", "unknown")
+                tool_instances.append(f"{tool_name}()")
+        
+        tools_str = "[" + ", ".join(tool_instances) + "]" if tool_instances else "[]"
+        
+        agents_def.append(f'agent_{i} = Agent(role="{role}", goal="{goal}", backstory="{backstory}", tools={tools_str}, verbose=False, allow_delegation=False, llm=llm)')
         agents_list.append(f"agent_{i}")
         tasks_def.append(f'task_{i} = Task(description="{goal}", agent=agent_{i}, expected_output="Detailed result")')
         tasks_list.append(f"task_{i}")
@@ -223,6 +264,7 @@ def invoke_crew_task(
         ollama_model=OLLAMA_MODEL,
         ollama_base_url=OLLAMA_BASE_URL,
         output_dir=output_dir,
+        tools_import=tools_import,
         agents_def="\n".join(agents_def),
         tasks_def="\n".join(tasks_def),
         agents_list=", ".join(agents_list),
