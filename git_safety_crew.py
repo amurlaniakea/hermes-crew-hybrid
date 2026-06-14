@@ -73,8 +73,11 @@ for pattern in DANGEROUS_PATTERNS:
     if pattern.lower() in git_diff_content.lower():
         found_threats.append(pattern)
 
+quick_scan_note = ""
 if found_threats:
-    print(f"⚠️  QUICK SCAN: Patrones peligrosos detectados: {found_threats}")
+    quick_scan_note = f"\n\n[QUICK SCAN DETECTED: {', '.join(found_threats)}]"
+else:
+    quick_scan_note = "\n\n[QUICK SCAN: No dangerous patterns detected]"
 
 # ── CrewAI Agents ───────────────────────────────────────────────────────────
 
@@ -120,15 +123,18 @@ Si el diff es de documentación, markdown o configuración no sensible, considé
 )
 
 task_verdict = Task(
-    description="""Revisa el informe de riesgos anterior. Emite una decisión final estricta.
+    description=f"""Revisa el informe de riesgos anterior Y el resultado del quick scan. Emite una decisión final.
 
-REGLAS:
-- Si hay CUALQUIER riesgo de severidad Alta o Media: VERDICT: FAIL
-- Si hay credenciales hardcodeadas: VERDICT: FAIL
-- Si hay uso de eval/exec/os.system con input del usuario: VERDICT: FAIL
-- Si todo es seguro: VERDICT: PASS
+{quick_scan_note}
 
-Tu respuesta DEBE contener exactamente una de estas líneas:
+REGLAS OBLIGATORIAS (NO NEGOCIABLES):
+- Si el quick scan detectó CUALQUIER patrón peligroso: VERDICT: FAIL
+- Si el quick scan NO detectó patrones Y el informe no encontró riesgos: VERDICT: PASS
+- Si el quick scan NO detectó patrones PERO el informe encontró riesgos: VERDICT: FAIL
+
+El quick scan es la fuente de verdad principal. Si detectó patrones, el veredicto DEBE ser FAIL sin importar lo que diga el informe de análisis.
+
+Tu respuesta DEBE empezar con exactamente una de estas líneas:
 VERDICT: PASS
 o
 VERDICT: FAIL
