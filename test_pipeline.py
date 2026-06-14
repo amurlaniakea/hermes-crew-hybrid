@@ -139,7 +139,13 @@ class TestInvokeCrewTask:
 
     def test_docker_not_available(self):
         from invoke_crew_task import invoke_crew_task
-
+        # Si Docker está disponible, el test no aplica
+        # Verificar que Docker está disponible
+        import subprocess
+        check = subprocess.run(["docker", "info"], capture_output=True, timeout=5)
+        if check.returncode == 0:
+            pytest.skip("Docker is available, skipping this test")
+        
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             result = invoke_crew_task(
@@ -148,10 +154,8 @@ class TestInvokeCrewTask:
                 scope="Test",
                 output_dir=tmpdir,
             )
-
-            # Should return error if Docker not available
-            if result["status"] == "error":
-                assert "Docker" in result.get("error", "")
+            assert result["status"] == "error"
+            assert "Docker" in result.get("error", "")
 
 
 # ────────────────────────────────────────────────────────────────────────────
