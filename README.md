@@ -81,19 +81,26 @@ cp .env.example .env
 Edita `.env` con tu configuración:
 
 ```env
-# Obligatorio: Ruta a tu vault de Obsidian
+# Obligatorio: Modelo Ollama (debe estar instalado localmente)
+# Ejemplos:
+#   OLLAMA_MODEL=qwen2.5:0.5b                    (rápido, 397MB)
+#   OLLAMA_MODEL=batiai/gemma4-e2b:q4             (potente, 3.4GB)
+#   OLLAMA_MODEL=llama3:latest                    (meta, 4.7GB)
+#   OLLAMA_MODEL=mistral:7b-instruct-v0.3:q4_k_m  (mistral)
+OLLAMA_MODEL=qwen2.5:0.5b
+
+# Ollama URL (opcional — default: localhost:11434)
+OPENAI_API_BASE=http://localhost:11434/v1
+OPENAI_API_KEY=*** Opcional: Ruta a tu vault de Obsidian
 # Windows (WSL): /mnt/c/Users/TuUsuario/Documents/Obsidian Vault
 # Linux: /home/tuusuario/Documents/Obsidian Vault
 # macOS: /Users/tuusuario/Documents/Obsidian Vault
-OBSIDIAN_VAULT_PATH=/tu/ruta/al/vault
+# Si no se configura, los reportes se guardan en ./ObsidianNotes
+OBSIDIAN_VAULT_PATH=
 
-# Ollama (opcional — default: localhost:11434)
-OPENAI_API_BASE=http://localhost:11434/v1
-OPENAI_API_KEY=ollama
-
-# Modelo Ollama (opcional — default: qwen2.5:0.5b)
-# OLLAMA_MODEL=qwen2.5:0.5b
-# OLLAMA_MODEL=batiai/gemma4-e2b:q4
+# Opcional: Ruta a tu venv de Python
+# Si está vacío, se detecta automáticamente
+VENV_PYTHON=
 ```
 
 ### 2. Instalar dependencias

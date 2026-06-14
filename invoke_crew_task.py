@@ -24,9 +24,20 @@ from datetime import datetime
 # ────────────────────────────────────────────────────────────────────────────
 # Configuración del modelo Ollama
 # ────────────────────────────────────────────────────────────────────────────
+# Lee de .env si existe, sino usa defaults
+import os
+from pathlib import Path
 
-OLLAMA_MODEL = "qwen2.5:0.5b"  # Cambiar a "batiai/gemma4-e2b:q4" cuando funcione
-OLLAMA_BASE_URL = "http://localhost:11434"
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    for line in _env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 # ────────────────────────────────────────────────────────────────────────────

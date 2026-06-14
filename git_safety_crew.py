@@ -18,6 +18,22 @@ Salida:
 import sys
 import os
 
+from pathlib import Path
+
+# ── Load .env configuration ──────────────────────────────────────────────────
+# Allows each user to configure their own Ollama model
+
+_env_file = Path(__file__).parent / ".env"
+if _env_file.exists():
+    for line in _env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
+
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
 # Force unbuffered output
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -26,8 +42,8 @@ from crewai import Agent, Task, Crew, LLM
 # ── LLM Configuration ───────────────────────────────────────────────────────
 
 local_llm = LLM(
-    model="ollama/qwen2.5:0.5b",  # Rápido para análisis de diffs
-    base_url="http://localhost:11434",
+    model=f"ollama/{OLLAMA_MODEL}",
+    base_url=OLLAMA_BASE_URL,
 )
 
 # ── Read git diff from stdin ────────────────────────────────────────────────
