@@ -62,7 +62,7 @@ Edita `.env` con tu configuración:
 
 ```env
 # Modelo Ollama local (REQUERIDO si usas Ollama)
-OLLAMA_MODEL=qwen2.5:0.5b
+OLLAMA_MODEL=batiai/gemma4-e2b:q4
 OPENAI_API_BASE=http://localhost:11434/v1
 OPENAI_API_KEY=ollama
 
@@ -139,7 +139,7 @@ print(f"Nota guardada: {consolidated['note_path']}")
 
 | Proveedor | Formato | Ejemplo |
 |-----------|---------|---------|
-| Ollama local | `ollama/modelo` | `ollama/qwen2.5:0.5b` |
+| Ollama local | `ollama/modelo` | `ollama/batiai/gemma4-e2b:q4` |
 | OpenAI | `openai/modelo` | `openai/gpt-4o` |
 | Anthropic | `anthropic/modelo` | `anthropic/claude-sonnet-4-20250514` |
 | Google | `gemini/modelo` | `gemini/gemini-1.5-pro` |
