@@ -197,9 +197,8 @@ task_{i} = Task(
             "--memory", "512m",
             "--cpus", "1.0",
             "--read-only",
-            "python:3.12-slim",
-            "bash", "-c",
-            "pip install -q crewai crewai-tools langchain && python /crew.py"
+            "hermes-crew:latest",
+            "python", "/crew.py"
         ],
         capture_output=True, text=True, timeout=timeout
     )
