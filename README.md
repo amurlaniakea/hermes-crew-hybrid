@@ -145,6 +145,7 @@ print(f"Nota guardada: {consolidated['note_path']}")
 | Google | `gemini/modelo` | `gemini/gemini-1.5-pro` |
 | Groq | `groq/modelo` | `groq/llama-3.1-70b-versatile` |
 | DeepSeek | `deepseek/modelo` | `deepseek/deepseek-coder` |
+| **OpenRouter** | `openrouter/modelo` | `openrouter/meta-llama/llama-3.1-8b-instruct:free` |
 | AWS | `bedrock/modelo` | `bedrock/anthropic.claude-3-sonnet` |
 | Azure | `azure/modelo` | `azure/gpt-4o` |
 
