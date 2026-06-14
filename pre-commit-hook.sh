@@ -89,30 +89,31 @@ CREW_REPORT=$(echo "$GIT_DIFF" | env PYTHONUNBUFFERED=1 "$PYTHON3" -u "$CREW_SCR
 echo "$CREW_REPORT" > "$LOG_FILE"
 echo "📝 Log guardado: $LOG_FILE"
 
-# ── Run Agent Fixer Stage ───────────────────────────────────────────────────
+# ── Run Agent Fixer Stage (opcional — si security_gateway está disponible) ───
 
-FIXER_RESULT=$(echo "$CREW_REPORT" | env PYTHONUNBUFFERED=1 "$PYTHON3" -c "
-import sys, os
+FIXER_RESULT=""
+FIXER_FAIL=false
 
-# Añadir paths del repo
-repo_root = os.environ.get('REPO_ROOT', '$REPO_ROOT')
-sys.path.insert(0, repo_root)
-
-# Buscar agent-fixer-stage
-fixer_paths = [
-    os.path.join(repo_root, '..', 'agent-fixer-stage'),
-    os.path.join(repo_root, 'agent-fixer-stage'),
-    '/home/sil/agent-fixer-stage',
-]
-for fp in fixer_paths:
-    if os.path.isdir(fp):
-        sys.path.insert(0, fp)
+# Buscar security_gateway.py en paths comunes
+FIXER_SCRIPT=""
+for path in "$REPO_ROOT/hermes-crew-hybrid/security_gateway.py" "$REPO_ROOT/security_gateway.py" "/home/sil/hermes-crew-hybrid/security_gateway.py"; do
+    if [ -f "$path" ]; then
+        FIXER_SCRIPT="$path"
         break
+    fi
+done
 
-from security_gateway import SecurityGateway
+if [ -n "$FIXER_SCRIPT" ] && [ -n "$PYTHON3" ]; then
+    FIXER_RESULT=$(echo "$CREW_REPORT" | env PYTHONUNBUFFERED=1 "$PYTHON3" -c "
+import sys, os, importlib.util
+
+# Cargar security_gateway desde el path encontrado
+spec = importlib.util.spec_from_file_location('security_gateway', '$FIXER_SCRIPT')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
 
 report = sys.stdin.read()
-gateway = SecurityGateway(scope='Git pre-commit security analysis', sensitivity='medium')
+gateway = mod.SecurityGateway(scope='Git pre-commit security analysis', sensitivity='medium')
 result = gateway.process(report)
 
 print(f'FIXER_STATUS: {result[\"action_taken\"]}')
@@ -120,8 +121,11 @@ print(f'FIXER_SCORE: {result[\"score\"]:.2f}')
 if result['reason']:
     print(f'FIXER_REASON: {result[\"reason\"]}')
 " 2>&1) || true
-
-echo "$FIXER_RESULT"
+    
+    if echo "$FIXER_RESULT" | grep -qi "FIXER_STATUS: reject"; then
+        FIXER_FAIL=true
+    fi
+fi
 
 # ── Parse verdict ───────────────────────────────────────────────────────────
 
