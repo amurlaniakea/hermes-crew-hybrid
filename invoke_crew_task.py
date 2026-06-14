@@ -39,6 +39,10 @@ if _env_file.exists():
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+# Formato LiteLLM: ollama/model_name, openai/model_name, anthropic/model_name, etc.
+# El operador puede usar cualquier proveedor soportado por LiteLLM
+LITELLM_MODEL = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
+
 
 # ────────────────────────────────────────────────────────────────────────────
 # Template del script CrewAI
@@ -51,13 +55,14 @@ import sys
 sys.path.insert(0, "/output")
 
 # Configure Ollama
-os.environ["OPENAI_API_BASE"] = "http://localhost:11434/v1"
+os.environ["OPENAI_API_BASE"] = "{ollama_base_url}/v1"
 os.environ["OPENAI_API_KEY"] = "ollama"
 
 from crewai import Agent, Task, Crew, LLM
 
-# Create LLM
-llm = LLM(model="ollama/{ollama_model}", base_url="{ollama_base_url}")
+# Create LLM — supports both Ollama direct and LiteLLM
+# Model format: ollama/model_name (CrewAI uses LiteLLM internally)
+llm = LLM(model="{litellm_model}", base_url="{ollama_base_url}")
 
 # Import tools if needed
 {tools_import}
@@ -85,7 +90,6 @@ with open(output_path, "w", encoding="utf-8") as f:
     f.write(str(result))
 
 print("[CREW] Done. Output written to " + output_path)
-print("[CREW] Content: " + str(result)[:200])
 '''
 
 
@@ -309,6 +313,7 @@ def invoke_crew_task(
         timestamp=datetime.now().isoformat(),
         ollama_model=OLLAMA_MODEL,
         ollama_base_url=OLLAMA_BASE_URL,
+        litellm_model=LITELLM_MODEL,
         output_dir=output_dir,
         tools_import=tools_import,
         agents_def="\n".join(agents_def),

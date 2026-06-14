@@ -34,6 +34,9 @@ if _env_file.exists():
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:0.5b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+# Formato LiteLLM: ollama/model_name, openai/model_name, anthropic/model_name, etc.
+LITELLM_MODEL = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
+
 # Force unbuffered output
 os.environ["PYTHONUNBUFFERED"] = "1"
 
@@ -41,10 +44,7 @@ from crewai import Agent, Task, Crew, LLM
 
 # ── LLM Configuration ───────────────────────────────────────────────────────
 
-local_llm = LLM(
-    model=f"ollama/{OLLAMA_MODEL}",
-    base_url=OLLAMA_BASE_URL,
-)
+local_llm = LLM(model=LITELLM_MODEL, base_url=OLLAMA_BASE_URL)
 
 # ── Read git diff from stdin ────────────────────────────────────────────────
 
