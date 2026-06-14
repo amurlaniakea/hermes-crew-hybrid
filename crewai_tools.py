@@ -11,11 +11,17 @@ Define herramientas que los agentes de CrewAI pueden usar:
 - FileReadTool: Leer archivos
 - FileWriteTool: Escribir archivos
 - ObsidianSearchTool: Buscar en el vault de Obsidian
+- ObsidianReadTool: Leer nota específica de Obsidian
+
+Configuración:
+    OBSIDIAN_VAULT_PATH: variable de entorno con la ruta al vault de Obsidian
 """
 
+import os
+import subprocess
+from pathlib import Path
 from crewai.tools import BaseTool
 from typing import Optional
-import subprocess
 import json
 from pathlib import Path
 
@@ -84,8 +90,13 @@ class ObsidianSearchTool(BaseTool):
     name: str = "obsidian_search"
     description: str = "Search for notes in the Obsidian vault"
     
-    def _run(self, query: str, vault_path: str = "/mnt/c/Users/Sil/Documents/Obsidian Vault") -> str:
+    def _run(self, query: str, vault_path: str = None) -> str:
         """Busca notas en el vault de Obsidian."""
+        if not vault_path:
+            vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "")
+        if not vault_path:
+            return "ERROR: OBSIDIAN_VAULT_PATH not configured"
+        # ... resto del código
         try:
             vault = Path(vault_path)
             if not vault.exists():
@@ -112,8 +123,12 @@ class ObsidianReadTool(BaseTool):
     name: str = "obsidian_read"
     description: str = "Read a specific note from the Obsidian vault"
     
-    def _run(self, note_path: str, vault_path: str = "/mnt/c/Users/Sil/Documents/Obsidian Vault") -> str:
+    def _run(self, note_path: str, vault_path: str = None) -> str:
         """Lee una nota específica del vault."""
+        if not vault_path:
+            vault_path = os.getenv("OBSIDIAN_VAULT_PATH", "")
+        if not vault_path:
+            return "ERROR: OBSIDIAN_VAULT_PATH not configured"
         try:
             full_path = Path(vault_path) / note_path
             if not full_path.exists():

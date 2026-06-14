@@ -162,13 +162,24 @@ class CrewOutputParser:
 # Generador de notas Obsidian
 # ────────────────────────────────────────────────────────────────────────────
 
+import os
+
 class ObsidianNoteGenerator:
     """
     Genera notas en formato Obsidian (Markdown + frontmatter YAML).
     """
     
-    def __init__(self, vault_path: str = "/mnt/c/Users/Sil/Documents/Obsidian Vault/Memorias/IA y Computacion"):
-        self.vault_path = Path(vault_path)
+    def __init__(self, vault_path: str = None):
+        # Prioridad: parámetro > variable de entorno > default vacío
+        if vault_path:
+            self.vault_path = Path(vault_path)
+        elif os.getenv("OBSIDIAN_VAULT_PATH"):
+            self.vault_path = Path(os.getenv("OBSIDIAN_VAULT_PATH"))
+        else:
+            # Default: directorio actual + ObsidianNotes
+            self.vault_path = Path.cwd() / "ObsidianNotes"
+        
+        self.vault_path.mkdir(parents=True, exist_ok=True)
     
     def generate_note(self, parsed_output: dict, tags: list = None, source: str = "crewai") -> str:
         """

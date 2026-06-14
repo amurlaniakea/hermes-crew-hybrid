@@ -82,11 +82,24 @@ print("[CREW] Content: " + str(result)[:200])
 # Selección de modo de ejecución
 # ────────────────────────────────────────────────────────────────────────────
 
-def _determine_execution_mode(preferred: str) -> str:
-    """Determina el modo de ejecución basado en recursos disponibles."""
+def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
+    """
+    Determina el modo de ejecución basado en recursos y contexto.
+    
+    Lógica:
+    1. Si mode es "venv" o "docker" explícitamente → usar ese
+    2. Si mode es "auto":
+       a. Verificar RAM disponible (mínimo 2GB para Docker)
+       b. Verificar si Docker está disponible y la imagen existe
+       c. Verificar si CrewAI está instalado en venv
+       d. Si el repo tiene remotos compartidos → Docker (seguro)
+       e. Si el repo es local/personal → venv (rápido)
+       f. Fallback: venv
+    """
     if preferred in ("venv", "docker"):
         return preferred
     
+    # Check RAM
     ram_ok = True
     try:
         with open("/proc/meminfo") as f:
@@ -97,6 +110,7 @@ def _determine_execution_mode(preferred: str) -> str:
     except:
         pass
     
+    # Check Docker
     docker_ok = False
     try:
         dc = subprocess.run(["docker", "info"], capture_output=True, timeout=5)
@@ -106,6 +120,7 @@ def _determine_execution_mode(preferred: str) -> str:
     except:
         pass
     
+    # Check venv
     venv_ok = False
     try:
         vp = "/home/sil/mcp-core-defense/venv/bin/python3"
@@ -115,14 +130,32 @@ def _determine_execution_mode(preferred: str) -> str:
     except:
         pass
     
-    if docker_ok and ram_ok:
-        return "docker"
+    # Check if repo has shared remotes (collaborative repo → Docker for safety)
+    repo_is_shared = False
+    if repo_path and Path(repo_path).exists():
+        try:
+            remotes = subprocess.run(
+                ["git", "-C", repo_path, "remote", "-v"],
+                capture_output=True, text=True, timeout=3  # Timeout corto
+            )
+            # If repo has remotes (origin, upstream, etc.), it's shared
+            repo_is_shared = len(remotes.stdout.strip().split("\n")) > 0
+        except subprocess.TimeoutExpired:
+            pass  # Si tarda mucho, asumir que no es compartido
+        except:
+            pass
+    
+    # Decision
+    if repo_is_shared and docker_ok:
+        return "docker"  # Shared repo → maximum isolation
+    elif docker_ok and ram_ok:
+        return "docker"  # Docker available and enough RAM
     elif venv_ok:
-        return "venv"
+        return "venv"  # Fallback to venv
     elif docker_ok:
-        return "docker"
+        return "docker"  # Docker available but low RAM
     else:
-        return "venv"
+        return "venv"  # Last resort
 
 
 def _execute_in_venv(script_path: str, output_dir: str, timeout: int) -> dict:
@@ -161,6 +194,7 @@ def invoke_crew_task(
     timeout: int = 300,
     cleanup: bool = True,
     mode: str = "auto",
+    repo_path: str = None,
 ) -> dict:
     """
     Invoca una micro-tripulación de CrewAI.
@@ -173,6 +207,7 @@ def invoke_crew_task(
         timeout: Timeout en segundos (default: 300)
         cleanup: Si True, elimina archivos temporales
         mode: "auto", "venv", "docker"
+        repo_path: Path al repo Git (para detectar si es compartido)
     
     Returns:
         dict con status, execution_mode, raw_output, security, output_file, duration_seconds, crew_size
@@ -276,8 +311,10 @@ def invoke_crew_task(
         f.write(script)
     
     # Determinar modo y ejecutar
-    execution_mode = _determine_execution_mode(mode)
-    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}")
+    # Detectar si el repo actual tiene remotos (repo compartido → Docker)
+    repo_path = os.getcwd()
+    execution_mode = _determine_execution_mode(mode, repo_path=repo_path)
+    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {repo_path}")
     
     if execution_mode == "docker":
         exec_result = _execute_in_docker(script_path, output_dir, timeout)

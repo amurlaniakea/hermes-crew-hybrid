@@ -5,29 +5,62 @@
 #
 # Pre-commit hook: Code Safety con CrewAI + Ollama + Agent Fixer Stage
 #
-# Instala este hook:
-#   cp pre-commit .git/hooks/pre-commit
-#   chmod +x .git/hooks/pre-commit
+# Instalación:
+#   1. Copiar a .git/hooks/pre-commit: cp pre-commit-hook.sh .git/hooks/pre-commit
+#   2. Dar permisos: chmod +x .git/hooks/pre-commit
+#   3. Configurar .env con las rutas de tu sistema
+#
+# Para forzar el commit (no recomendado): git commit --no-verify
 
 set -e
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Detectar directorio del repo ─────────────────────────────────────────────
 
-CREW_SCRIPT="/home/sil/hermes-crew-hybrid/git_safety_crew.py"
-FIXER_SCRIPT="/home/sil/hermes-crew-hybrid/security_gateway.py"
-VENV_PYTHON="/home/sil/mcp-core-defense/venv/bin/python3"
-OBSIDIAN_VAULT="/mnt/c/Users/Sil/Documents/Obsidian Vault/Memorias/IA y Computacion"
-LOG_DIR="/tmp/git_safety_logs"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+    echo "⚠️  No se pudo detectar el directorio del repo. Saltando análisis."
+    exit 0
+fi
+
+# ── Cargar .env si existe ────────────────────────────────────────────────────
+
+ENV_FILE="$REPO_ROOT/.env"
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
+fi
+
+# ── Configuración (con valores por defecto) ──────────────────────────────────
+
+CREW_SCRIPT="${CREW_SCRIPT:-$REPO_ROOT/git_safety_crew.py}"
+OBSIDIAN_VAULT="${OBSIDIAN_VAULT_PATH:-}"
+LOG_DIR="${GIT_SAFETY_LOG_DIR:-/tmp/git_safety_logs}"
+
+# Detectar python3 del sistema o venv
+if [ -n "$VENV_PYTHON" ] && [ -f "$VENV_PYTHON" ]; then
+    PYTHON3="$VENV_PYTHON"
+elif [ -f "$REPO_ROOT/venv/bin/python3" ]; then
+    PYTHON3="$REPO_ROOT/venv/bin/python3"
+else
+    PYTHON3="$(command -v python3 2>/dev/null)"
+fi
+
+if [ -z "$PYTHON3" ] || [ ! -f "$PYTHON3" ]; then
+    echo "⚠️  python3 no encontrado. Saltando análisis de seguridad."
+    exit 0
+fi
 
 # ── Check dependencies ──────────────────────────────────────────────────────
 
 if [ ! -f "$CREW_SCRIPT" ]; then
-    echo "⚠️  git_safety_crew.py no encontrado. Saltando análisis de seguridad."
+    echo "⚠️  git_safety_crew.py no encontrado en $CREW_SCRIPT. Saltando análisis."
     exit 0
 fi
 
-if [ ! -f "$VENV_PYTHON" ]; then
-    echo "⚠️  venv no encontrado. Saltando análisis de seguridad."
+# Verificar que crewai está instalado
+if ! "$PYTHON3" -c "import crewai" 2>/dev/null; then
+    echo "⚠️  crewai no instalado en $PYTHON3. Saltando análisis de seguridad."
     exit 0
 fi
 
@@ -50,7 +83,7 @@ mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/safety_$TIMESTAMP.log"
 
-CREW_REPORT=$(echo "$GIT_DIFF" | env PYTHONUNBUFFERED=1 "$VENV_PYTHON" -u "$CREW_SCRIPT" 2>&1) || true
+CREW_REPORT=$(echo "$GIT_DIFF" | env PYTHONUNBUFFERED=1 "$PYTHON3" -u "$CREW_SCRIPT" 2>&1) || true
 
 # Log the report
 echo "$CREW_REPORT" > "$LOG_FILE"
@@ -58,10 +91,24 @@ echo "📝 Log guardado: $LOG_FILE"
 
 # ── Run Agent Fixer Stage ───────────────────────────────────────────────────
 
-FIXER_RESULT=$(echo "$CREW_REPORT" | env PYTHONUNBUFFERED=1 "$VENV_PYTHON" -c "
-import sys
-sys.path.insert(0, '/home/sil/hermes-crew-hybrid')
-sys.path.insert(0, '/home/sil/agent-fixer-stage')
+FIXER_RESULT=$(echo "$CREW_REPORT" | env PYTHONUNBUFFERED=1 "$PYTHON3" -c "
+import sys, os
+
+# Añadir paths del repo
+repo_root = os.environ.get('REPO_ROOT', '$REPO_ROOT')
+sys.path.insert(0, repo_root)
+
+# Buscar agent-fixer-stage
+fixer_paths = [
+    os.path.join(repo_root, '..', 'agent-fixer-stage'),
+    os.path.join(repo_root, 'agent-fixer-stage'),
+    '/home/sil/agent-fixer-stage',
+]
+for fp in fixer_paths:
+    if os.path.isdir(fp):
+        sys.path.insert(0, fp)
+        break
+
 from security_gateway import SecurityGateway
 
 report = sys.stdin.read()
@@ -78,13 +125,11 @@ echo "$FIXER_RESULT"
 
 # ── Parse verdict ───────────────────────────────────────────────────────────
 
-# Check CrewAI verdict
 CREW_FAIL=false
 if echo "$CREW_REPORT" | grep -qi "VERDICT: FAIL"; then
     CREW_FAIL=true
 fi
 
-# Check Agent Fixer verdict
 FIXER_FAIL=false
 if echo "$FIXER_RESULT" | grep -qi "FIXER_STATUS: reject"; then
     FIXER_FAIL=true
@@ -114,9 +159,10 @@ else
     echo ""
     echo "✅ [COMMIT APROBADO] Código verificado por CrewAI + Agent Fixer Stage."
     
-    # Save report to Obsidian
-    OBSIDIAN_FILE="$OBSIDIAN_VAULT/git_safety_$(git rev-parse --abbrev-ref HEAD)_${TIMESTAMP}.md"
-    cat > "$OBSIDIAN_FILE" << OBSHEADER
+    # Save report to Obsidian (si está configurado)
+    if [ -n "$OBSIDIAN_VAULT" ] && [ -d "$OBSIDIAN_VAULT" ]; then
+        OBSIDIAN_FILE="$OBSIDIAN_VAULT/git_safety_$(git rev-parse --abbrev-ref HEAD)_${TIMESTAMP}.md"
+        cat > "$OBSIDIAN_FILE" << OBSHEADER
 ---
 title: Git Safety Report - ${TIMESTAMP}
 date: $(date +%Y-%m-%d)
@@ -144,7 +190,8 @@ $CREW_REPORT
 $FIXER_RESULT
 \`\`\`
 OBSHEADER
+        echo "📝 Reporte guardado en Obsidian: $OBSIDIAN_FILE"
+    fi
     
-    echo "📝 Reporte guardado en Obsidian: $OBSIDIAN_FILE"
     exit 0
 fi

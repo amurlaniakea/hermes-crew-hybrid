@@ -68,18 +68,52 @@ hermes-crew-hybrid/
 - Ollama (con modelo local instalado)
 - Dependencias: `pip install crewai crewai-tools langchain litellm`
 
-## Instalación
+## Configuración
+
+### 1. Archivo .env
+
+Copia el archivo de ejemplo y ajusta las rutas:
 
 ```bash
-# Clonar repo
-git clone https://github.com/amurlaniakea/hermes-crew-hybrid.git
-cd hermes-crew-hybrid
+cp .env.example .env
+```
 
-# Instalar dependencias en venv existente
-/home/sil/mcp-core-defense/venv/bin/pip install crewai crewai-tools langchain litellm
+Edita `.env` con tu configuración:
 
-# Verificar sintaxis
-python3 -c "import invoke_crew_task; print('OK')"
+```env
+# Obligatorio: Ruta a tu vault de Obsidian
+# Windows (WSL): /mnt/c/Users/TuUsuario/Documents/Obsidian Vault
+# Linux: /home/tuusuario/Documents/Obsidian Vault
+# macOS: /Users/tuusuario/Documents/Obsidian Vault
+OBSIDIAN_VAULT_PATH=/tu/ruta/al/vault
+
+# Ollama (opcional — default: localhost:11434)
+OPENAI_API_BASE=http://localhost:11434/v1
+OPENAI_API_KEY=ollama
+
+# Modelo Ollama (opcional — default: qwen2.5:0.5b)
+# OLLAMA_MODEL=qwen2.5:0.5b
+# OLLAMA_MODEL=batiai/gemma4-e2b:q4
+```
+
+### 2. Instalar dependencias
+
+```bash
+# En tu venv existente
+pip install crewai crewai-tools langchain litellm python-dotenv
+
+# O crear un nuevo venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Instalar pre-commit hook
+
+```bash
+# En el repositorio donde quieras usar Code Safety
+cp pre-commit-hook.sh /ruta/al/repo/.git/hooks/pre-commit
+chmod +x /ruta/al/repo/.git/hooks/pre-commit
 ```
 
 ## Uso
