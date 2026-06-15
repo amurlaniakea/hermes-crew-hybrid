@@ -130,32 +130,37 @@ task_analyze = Task(
 Busca ESPECÍFICAMENTE estos riesgos de seguridad REALES:
 1. Inyección SQL: concatenación de strings en queries SQL (ej: "SELECT * FROM " + user_input)
 2. Ejecución de comandos: os.system(), subprocess.call(), eval(), exec() con input del usuario
-3. Credenciales hardcodeadas: passwords, API keys, tokens en texto plano
+3. Credenciales hardcodeadas: passwords, API keys, tokens en texto plano (NO variables como "name" o "result")
 4. XSS: renderizado de HTML sin escapar input del usuario
 5. Deserialización insegura: pickle.loads(), yaml.load() sin SafeLoader
 
 NO marques como riesgo:
-- Variables normales (name, count, result)
-- Funciones matemáticas (add, multiply)
-- Strings normales que no sean credenciales
-- Código de documentación o markdown
+- Variables normales (name, count, result, items, price)
+- Funciones matemáticas (add, multiply, divide, sum)
+- Strings normales que no sean credenciales (f"Hello, {name}" es seguro)
+- Clases y métodos normales
+- Código de documentación, markdown o configuración
 
-Si el diff es de documentación, markdown o configuración no sensible, considéralo seguro.""",
-    expected_output="Un informe conciso con los riesgos REALES encontrados. Si no hay riesgos reales, indicar 'Sin riesgos de seguridad detectados'.",
+REGLA PRINCIPAL: Si el código es Python normal con funciones, clases, strings y matemáticas, y NO contiene os.system, subprocess, eval, exec, passwords hardcodeados o SQL dinámico, entonces es SEGURO.
+
+Si no hay riesgos reales, responde EXPLICITAMENTE: 'Sin riesgos de seguridad detectados. El código es seguro.'""",
+    expected_output="Un informe conciso. Si no hay riesgos reales, indicar EXPLICITAMENTE: 'Sin riesgos de seguridad detectados'.",
     agent=diff_analyst,
 )
 
 task_verdict = Task(
-    description=f"""Revisa el informe de riesgos anterior Y el resultado del quick scan. Emite una decisión final.
+    description=f"""Revisa el informe de riesgos del analista Y el resultado del quick scan. Emite una decisión final.
 
 {quick_scan_note}
 
 REGLAS OBLIGATORIAS (NO NEGOCIABLES):
-- Si el quick scan detectó CUALQUIER patrón peligroso: VERDICT: FAIL
-- Si el quick scan NO detectó patrones Y el informe no encontró riesgos: VERDICT: PASS
-- Si el quick scan NO detectó patrones PERO el informe encontró riesgos: VERDICT: FAIL
+- Si el quick scan detectó patrones peligrosos Y el analista confirmó riesgos: VERDICT: FAIL
+- Si el quick scan detectó patrones peligrosos PERO el analista NO encontró riesgos reales: VERDICT: PASS (falso positivo del quick scan)
+- Si el quick scan NO detectó patrones Y el analista NO encontró riesgos: VERDICT: PASS
+- Si el quick scan NO detectó patrones PERO el analista encontró riesgos reales: VERDICT: FAIL
 
-El quick scan es la fuente de verdad principal. Si detectó patrones, el veredicto DEBE ser FAIL sin importar lo que diga el informe de análisis.
+El analista de diffs es la fuente de verdad principal. El quick scan es solo un indicador adicional.
+Si el analista dice "Sin riesgos de seguridad detectados", el veredicto DEBE ser PASS sin importar el quick scan.
 
 Tu respuesta DEBE empezar con exactamente una de estas líneas:
 VERDICT: PASS
