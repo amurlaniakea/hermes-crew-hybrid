@@ -12,13 +12,44 @@ Usa Agent Fixer Stage (v0.2.0) como motor de detección.
 
 import sys
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
-# Añadir Agent Fixer Stage al path
-FIXER_PATH = "/home/sil/agent-fixer-stage"
-if FIXER_PATH not in sys.path:
-    sys.path.insert(0, FIXER_PATH)
+# ── Buscar Agent Fixer Stage en paths dinámicos ──────────────────────────────
+# Prioridad: variable de entorno > path relativo > paths comunes > import directo
+
+def _find_fixer_path():
+    """Busca el módulo agent_fixer en múltiples paths."""
+    # 1. Variable de entorno
+    env_path = os.getenv("AGENT_FIXER_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+    
+    # 2. Path relativo al directorio actual del script
+    candidate = Path(__file__).parent.parent / "agent-fixer-stage"
+    if candidate.exists():
+        return str(candidate)
+    
+    # 3. Path relativo al directorio de trabajo
+    candidate = Path.cwd() / "agent-fixer-stage"
+    if candidate.exists():
+        return str(candidate)
+    
+    # 4. Paths comunes (para compatibilidad)
+    common_paths = [
+        "/home/sil/agent-fixer-stage",
+        "/home/sil/hermes-crew-hybrid/agent-fixer-stage",
+    ]
+    for p in common_paths:
+        if Path(p).exists():
+            return p
+    
+    return None
+
+_FIXER_PATH = _find_fixer_path()
+if _FIXER_PATH and _FIXER_PATH not in sys.path:
+    sys.path.insert(0, _FIXER_PATH)
 
 try:
     from agent_fixer import AgentFixer, FixerStatus
@@ -102,7 +133,7 @@ class SecurityGateway:
             }
         elif result.status == FixerStatus.CLEAN:
             return {
-                "safe": True,
+                "safe": False,  # Fue limpiado → no estaba seguro originalmente
                 "output": result.cleaned_output,
                 "score": result.score,
                 "reason": result.reason,

@@ -65,12 +65,35 @@ DANGEROUS_PATTERNS = [
     "curl ", "wget ", "requests.get(input",
     "rm -rf", "format(user_input", "f\"{user",
     ".execute(", "RAW_QUERY", "text(user_input",
+    # Leetspeak / obfuscated variants
+    "p@ssw0rd", "p@ssword", "passw0rd", "p@55w0rd",
+    "secret", "s3cret", "s3cr3t", "@pi_key", "api_k3y",
+    "3x3cut3", "3x3c", "ex3cute",
+    "1gn0r3", "ign0r3", "ignor3", "1nstruct10n", "1nstruct1on",
+    "cur1", "wget", "rm -rf",
+    "byp@ss", "byp4ss", "bypass",
+    "0v3rr1d3", "ov3rr1d3", "override",
 ]
+
+def _normalize_for_scanning(text: str) -> str:
+    """Normaliza texto para el quick scan — convierte leetspeak a ASCII."""
+    # Leetspeak → ASCII mapping (subset of full homoglyph map)
+    leet_map = str.maketrans({
+        '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's',
+        '6': 'g', '7': 't', '8': 'b', '9': 'q',
+        '@': 'a', '$': 's', '!': 'i', '|': 'l', '+': 't',
+        # Cirílico lookalike
+        'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c',
+        'х': 'x', 'у': 'y', 'і': 'i',
+    })
+    # Aplicar normalización + lowercase
+    return text.translate(leet_map).lower()
 
 # Quick pre-scan for obvious threats
 found_threats = []
+scan_text = _normalize_for_scanning(git_diff_content)
 for pattern in DANGEROUS_PATTERNS:
-    if pattern.lower() in git_diff_content.lower():
+    if pattern.lower() in scan_text:
         found_threats.append(pattern)
 
 quick_scan_note = ""
