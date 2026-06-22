@@ -1,3 +1,0 @@
-1. Seguridad de IA (Inteligencia Artificial) se refiere al proteger y mantenerla despejada contra daños y vulnerabilidades adversas.
-2. El correcto manejo o integridad de nuestros agentes es crucial para su honestidad y efectividad en la aplicación de estas artificial-intelligence.
-3. Un buen manejo del riesgo se realiza mediante el uso de medidas adecuadas de las tecnologías y la ética en los procesos de diseño, desarrollo y mantenimiento.

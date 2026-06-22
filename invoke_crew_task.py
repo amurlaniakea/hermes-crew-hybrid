@@ -122,7 +122,7 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
                 if "MemAvailable" in line:
                     ram_ok = int(line.split()[1]) > 2_000_000
                     break
-    except:
+    except Exception:
         pass
     
     # Check Docker
@@ -132,7 +132,7 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
         if dc.returncode == 0:
             img = subprocess.run(["docker", "images", "-q", "hermes-crew:latest"], capture_output=True, text=True, timeout=5)
             docker_ok = img.stdout.strip() != ""
-    except:
+    except Exception:
         pass
     
     # Check venv
@@ -142,7 +142,7 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
         if Path(vp).exists():
             ck = subprocess.run([vp, "-c", "import crewai; print('ok')"], capture_output=True, text=True, timeout=10)
             venv_ok = ck.returncode == 0
-    except:
+    except Exception:
         pass
     
     # Check if repo has shared remotes (collaborative repo → Docker for safety)
@@ -157,7 +157,7 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
             repo_is_shared = len(remotes.stdout.strip().split("\n")) > 0
         except subprocess.TimeoutExpired:
             pass  # Si tarda mucho, asumir que no es compartido
-        except:
+        except Exception:
             pass
     
     # Decision
@@ -365,8 +365,10 @@ def invoke_crew_task(
         security_result = {"status": "error", "error": str(e), "score": 0.0, "reason": str(e), "cleaned_output": raw_output, "layer": "none", "details": {}}
     
     if cleanup:
-        try: os.remove(script_path)
-        except: pass
+        try:
+            os.remove(script_path)
+        except OSError:
+            pass
     
     return {
         "status": "success" if exec_result.get("returncode", 0) == 0 else "error",
