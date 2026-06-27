@@ -36,14 +36,10 @@ def _find_fixer_path():
     if candidate.exists():
         return str(candidate)
     
-    # 4. Paths comunes (para compatibilidad)
-    common_paths = [
-        "/home/sil/agent-fixer-stage",
-        "/home/sil/hermes-crew-hybrid/agent-fixer-stage",
-    ]
-    for p in common_paths:
-        if Path(p).exists():
-            return p
+    # 4. Variable de entorno para path explícito (portable)
+    env_fallback = os.getenv("AGENT_FIXER_STAGE_DIR")
+    if env_fallback and Path(env_fallback).exists():
+        return env_fallback
     
     return None
 
@@ -181,7 +177,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.input:
-        with open(args.input) as f:
+        from path_validator import validate_path
+        input_path = validate_path(args.input, must_exist=True)
+        with open(input_path, encoding="utf-8") as f:
             crew_output = f.read()
     else:
         crew_output = sys.stdin.read()

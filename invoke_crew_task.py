@@ -25,7 +25,6 @@ from datetime import datetime
 # Configuración del modelo Ollama
 # ────────────────────────────────────────────────────────────────────────────
 # Lee de .env si existe, sino usa defaults
-import os
 from pathlib import Path
 
 _env_file = Path(__file__).parent / ".env"
@@ -42,6 +41,9 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 # Formato LiteLLM: ollama/model_name, openai/model_name, anthropic/model_name, etc.
 # El operador puede usar cualquier proveedor soportado por LiteLLM
 LITELLM_MODEL = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
+
+# Paths dinámicos — desde variables de entorno (portability)
+HERMES_CREW_VENV = os.getenv("HERMES_CREW_VENV", "/home/sil/mcp-core-defense/venv/bin/python3")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -138,7 +140,7 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
     # Check venv
     venv_ok = False
     try:
-        vp = "/home/sil/mcp-core-defense/venv/bin/python3"
+        vp = HERMES_CREW_VENV
         if Path(vp).exists():
             ck = subprocess.run([vp, "-c", "import crewai; print('ok')"], capture_output=True, text=True, timeout=10)
             venv_ok = ck.returncode == 0
@@ -175,10 +177,12 @@ def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
 
 def _execute_in_venv(script_path: str, output_dir: str, timeout: int) -> dict:
     """Ejecuta el script de CrewAI en el venv local con output sin buffer."""
+    from path_validator import validate_path
+    safe_script = validate_path(script_path, must_exist=True)
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     result = subprocess.run(
-        ["/home/sil/mcp-core-defense/venv/bin/python3", "-u", script_path],
+        [HERMES_CREW_VENV, "-u", str(safe_script)],
         capture_output=True, text=True, timeout=timeout,
         cwd=output_dir, env=env
     )
@@ -229,8 +233,12 @@ def invoke_crew_task(
     """
     start_time = datetime.now()
     
+    # ── Usar directorio seguro en vez de /tmp (S5443 + S8707) ──
+    from path_validator import validate_path, get_safe_output_dir, get_safe_script_path
     if output_dir is None:
-        output_dir = f"/tmp/crew_output_{os.getpid()}"
+        output_dir = get_safe_output_dir()
+    else:
+        output_dir = str(validate_path(output_dir))
     os.makedirs(output_dir, exist_ok=True)
     
     # ── MCP Core Defense: Auditar herramientas antes de ejecutar ──────────────
@@ -322,15 +330,14 @@ def invoke_crew_task(
         tasks_list=", ".join(tasks_list),
     )
     
-    script_path = f"/tmp/crew_{os.getpid()}.py"
+    script_path = get_safe_script_path()
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(script)
     
     # Determinar modo y ejecutar
-    # Detectar si el repo actual tiene remotos (repo compartido → Docker)
-    repo_path = os.getcwd()
-    execution_mode = _determine_execution_mode(mode, repo_path=repo_path)
-    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {repo_path}")
+    effective_repo_path = repo_path or os.getcwd()
+    execution_mode = _determine_execution_mode(mode, repo_path=effective_repo_path)
+    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {effective_repo_path}")
     
     if execution_mode == "docker":
         exec_result = _execute_in_docker(script_path, output_dir, timeout)
@@ -339,15 +346,20 @@ def invoke_crew_task(
     
     duration = (datetime.now() - start_time).total_seconds()
     
-    # Leer output
+    # Leer output — validar path antes de acceder (S8707)
     output_file = Path(output_dir) / "result.md"
-    raw_output = output_file.read_text(encoding="utf-8") if output_file.exists() else exec_result.get("stdout", "") + "\n" + exec_result.get("stderr", "")
+    raw_output = ""
+    if output_file.exists():
+        validated_output = validate_path(str(output_file), base_dir=output_dir)
+        raw_output = validated_output.read_text(encoding="utf-8")
+    else:
+        raw_output = exec_result.get("stdout", "") + "\n" + exec_result.get("stderr", "")
     
     # Pasar por Agent Fixer Stage
     security_result = None
     try:
         import sys as _sys
-        _fixer_path = "/home/sil/agent-fixer-stage"
+        _fixer_path = os.getenv("AGENT_FIXER_PATH", "/home/sil/agent-fixer-stage")
         if _fixer_path not in _sys.path:
             _sys.path.insert(0, _fixer_path)
         from agent_fixer import AgentFixer

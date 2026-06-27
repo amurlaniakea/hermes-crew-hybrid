@@ -97,8 +97,8 @@ class CrewOutputParser:
     
     def _extract_title(self, text: str) -> str:
         """Extrae el título del documento."""
-        # Buscar primer heading
-        match = re.search(r'^#\s+(.+)$', text, re.MULTILINE)
+        # Buscar primer heading — regex segura (sin backtracking exponencial)
+        match = re.search(r'^#\s+([^\n]+)$', text, re.MULTILINE)
         if match:
             return match.group(1).strip()
         # Fallback: primera línea no vacía
@@ -115,7 +115,7 @@ class CrewOutputParser:
         current_content = []
         
         for line in text.split('\n'):
-            heading_match = re.match(r'^#{1,3}\s+(.+)$', line)
+            heading_match = re.match(r'^#{1,3}\s+([^\n]+)$', line)
             if heading_match:
                 if current_heading:
                     sections.append({
@@ -179,6 +179,9 @@ class ObsidianNoteGenerator:
             # Default: directorio actual + ObsidianNotes
             self.vault_path = Path.cwd() / "ObsidianNotes"
         
+        # ── Validar path contra traversal (S8707 + S5443) ──
+        from path_validator import validate_path
+        self.vault_path = validate_path(str(self.vault_path))
         self.vault_path.mkdir(parents=True, exist_ok=True)
     
     def generate_note(self, parsed_output: dict, tags: list = None, source: str = "crewai") -> str:
@@ -271,7 +274,11 @@ class ObsidianNoteGenerator:
         
         # Limpiar filename
         safe_filename = re.sub(r'[^\w\s-]', '', filename).strip().replace(' ', '_')
+        
+        # ── Validar que el filepath queda dentro del vault (S8707) ──
+        from path_validator import validate_path
         filepath = target_dir / f"{safe_filename}.md"
+        filepath = validate_path(str(filepath), base_dir=str(self.vault_path))
         
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -364,7 +371,10 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    with open(args.input) as f:
+    # ── Validar path de input contra traversal (S8707) ──
+    from path_validator import validate_path
+    input_path = validate_path(args.input, must_exist=True)
+    with open(input_path, encoding="utf-8") as f:
         raw_output = f.read()
     
     # Simular resultado de invoke_crew_task
@@ -381,7 +391,7 @@ if __name__ == "__main__":
     )
     
     if result["status"] == "success":
-        print(f"✅ Nota generada")
+        print("✅ Nota generada")
         print(f"Título: {result['parsed']['title']}")
         print(f"Secciones: {len(result['parsed']['sections'])}")
         print(f"Hallazgos: {len(result['parsed']['key_findings'])}")

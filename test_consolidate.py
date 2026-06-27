@@ -6,6 +6,7 @@
 """Tests de la Fase 4: Consolidación CrewAI → Hermes → Obsidian."""
 
 import pytest
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -125,7 +126,7 @@ Contenido de la sección 2.
 class TestObsidianNoteGenerator:
 
     def test_generate_note(self):
-        generator = ObsidianNoteGenerator(vault_path="/tmp/test_vault")
+        generator = ObsidianNoteGenerator(vault_path=os.path.expanduser("~/.local/share/hermes-crew-hybrid/test_vault"))
         parsed = {
             "title": "Test Note",
             "summary": "This is a test summary",

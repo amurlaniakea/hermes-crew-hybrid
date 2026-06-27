@@ -18,14 +18,15 @@ Flujo:
 
 import sys
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
 
-# Paths
-MCP_CORE_DEFENSE_PATH = "/home/sil/mcp-core-defense"
-MCP_AUDIT_SCRIPT = f"{MCP_CORE_DEFENSE_PATH}/scripts/mcp_audit.py"
-MCP_VENV_PYTHON = f"{MCP_CORE_DEFENSE_PATH}/venv/bin/python3"
+# Paths — desde variables de entorno (portable, nunca hardcodear)
+MCP_CORE_DEFENSE_PATH = os.getenv("MCP_CORE_DEFENSE_PATH", "/home/sil/mcp-core-defense")
+MCP_AUDIT_SCRIPT = os.path.join(MCP_CORE_DEFENSE_PATH, "scripts", "mcp_audit.py")
+MCP_VENV_PYTHON = os.path.join(MCP_CORE_DEFENSE_PATH, "venv", "bin", "python3")
 
 
 class MCPToolAuditor:
@@ -65,11 +66,19 @@ class MCPToolAuditor:
         if not self.audit_available:
             return {"safe": True, "score": 0.0, "reason": "Audit not available", "tool_name": tool_name}
         
+        # ── Validar inputs antes de pasarlos a subprocess (S8705) ──
+        from path_validator import sanitize_shell_arg
+        try:
+            safe_name = sanitize_shell_arg(tool_name)
+            safe_desc = sanitize_shell_arg(tool_description, max_length=1024)
+        except ValueError as e:
+            return {"safe": False, "score": 1.0, "reason": f"Input validation failed: {e}", "tool_name": tool_name}
+        
         try:
             result = subprocess.run(
                 [MCP_VENV_PYTHON, MCP_AUDIT_SCRIPT,
-                 "--tool-name", tool_name,
-                 "--tool-description", tool_description,
+                 "--tool-name", safe_name,
+                 "--tool-description", safe_desc,
                  "--sensitivity", self.sensitivity,
                  "--json"],
                 capture_output=True, text=True, timeout=30
