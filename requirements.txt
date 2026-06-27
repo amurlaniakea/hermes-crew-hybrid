@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Pedro Sordo Martínez <amurlaniakea@gmail.com>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Pinned dependencies for hermes-crew-hybrid CI
+
+crewai==0.115.10
+crewai-tools==0.115.10
+litellm==1.90.0
+pytest==9.1.1
+pytest-cov==7.1.0
