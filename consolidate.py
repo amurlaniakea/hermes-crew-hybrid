@@ -103,7 +103,7 @@ class CrewOutputParser:
         for line in text.split('\n'):
             if len(line) > self._MAX_HEADING_LEN:
                 continue
-            match = re.match(r'^#\s+(.+?)$', line)
+            match = re.match(r'^#\s+(.+)$', line)
             if match:
                 return match.group(1).strip()
         # Fallback: primera línea no vacía
@@ -123,7 +123,7 @@ class CrewOutputParser:
             if len(line) > self._MAX_HEADING_LEN:
                 current_content.append(line)
                 continue
-            heading_match = re.match(r'^#{1,3}\s+(.+?)$', line)
+            heading_match = re.match(r'^#{1,3}\s+(.+)$', line)
             if heading_match:
                 if current_heading:
                     sections.append({

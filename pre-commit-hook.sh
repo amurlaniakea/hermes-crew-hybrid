@@ -17,7 +17,7 @@ set -e
 # ── Detectar directorio del repo ─────────────────────────────────────────────
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -z "$REPO_ROOT" ]; then
+if [[ -z "$REPO_ROOT" ]]; then
     echo "⚠️  No se pudo detectar el directorio del repo. Saltando análisis."
     exit 0
 fi
@@ -25,7 +25,7 @@ fi
 # ── Cargar .env si existe ────────────────────────────────────────────────────
 
 ENV_FILE="$REPO_ROOT/.env"
-if [ -f "$ENV_FILE" ]; then
+if [[ -f "$ENV_FILE" ]]; then
     set -a
     source "$ENV_FILE"
     set +a
@@ -38,22 +38,22 @@ OBSIDIAN_VAULT="${OBSIDIAN_VAULT_PATH:-}"
 LOG_DIR="${GIT_SAFETY_LOG_DIR:-/tmp/git_safety_logs}"
 
 # Detectar python3 del sistema o venv
-if [ -n "$VENV_PYTHON" ] && [ -f "$VENV_PYTHON" ]; then
+if [[ -n "$VENV_PYTHON" ]] && [[ -f "$VENV_PYTHON" ]]; then
     PYTHON3="$VENV_PYTHON"
-elif [ -f "$REPO_ROOT/venv/bin/python3" ]; then
+elif [[ -f "$REPO_ROOT/venv/bin/python3" ]]; then
     PYTHON3="$REPO_ROOT/venv/bin/python3"
 else
     PYTHON3="$(command -v python3 2>/dev/null)"
 fi
 
-if [ -z "$PYTHON3" ] || [ ! -f "$PYTHON3" ]; then
+if [[ -z "$PYTHON3" ]] || [[ ! -f "$PYTHON3" ]]; then
     echo "⚠️  python3 no encontrado. Saltando análisis de seguridad."
     exit 0
 fi
 
 # ── Check dependencies ──────────────────────────────────────────────────────
 
-if [ ! -f "$CREW_SCRIPT" ]; then
+if [[ ! -f "$CREW_SCRIPT" ]]; then
     echo "⚠️  git_safety_crew.py no encontrado en $CREW_SCRIPT. Saltando análisis."
     exit 0
 fi
@@ -69,7 +69,7 @@ fi
 GIT_DIFF=$(git diff --cached --diff-algorithm=minimal)
 
 # If no code changes, allow commit immediately
-if [ -z "$GIT_DIFF" ]; then
+if [[ -z "$GIT_DIFF" ]]; then
     exit 0
 fi
 
@@ -97,13 +97,13 @@ FIXER_FAIL=false
 # Buscar security_gateway.py en paths comunes
 FIXER_SCRIPT=""
 for path in "$REPO_ROOT/hermes-crew-hybrid/security_gateway.py" "$REPO_ROOT/security_gateway.py" "/home/sil/hermes-crew-hybrid/security_gateway.py"; do
-    if [ -f "$path" ]; then
+    if [[ -f "$path" ]]; then
         FIXER_SCRIPT="$path"
         break
     fi
 done
 
-if [ -n "$FIXER_SCRIPT" ] && [ -n "$PYTHON3" ]; then
+if [[ -n "$FIXER_SCRIPT" ]] && [[ -n "$PYTHON3" ]]; then
     FIXER_RESULT=$(echo "$CREW_REPORT" | env PYTHONUNBUFFERED=1 "$PYTHON3" -c "
 import sys, os, importlib.util
 
@@ -141,17 +141,17 @@ fi
 
 # ── Decision ────────────────────────────────────────────────────────────────
 
-if [ "$CREW_FAIL" = true ] || [ "$FIXER_FAIL" = true ]; then
+if [[ "$CREW_FAIL" = true ]] || [[ "$FIXER_FAIL" = true ]]; then
     echo ""
     echo "❌ [COMMIT RECHAZADO] Code Safety detectó riesgos:"
     echo ""
     
-    if [ "$CREW_FAIL" = true ]; then
+    if [[ "$CREW_FAIL" = true ]]; then
         echo "  → CrewAI detectó vulnerabilidades:"
         echo "$CREW_REPORT" | grep -A 3 "VERDICT: FAIL" | head -10
     fi
     
-    if [ "$FIXER_FAIL" = true ]; then
+    if [[ "$FIXER_FAIL" = true ]]; then
         echo "  → Agent Fixer Stage detectó anomalías:"
         echo "$FIXER_RESULT" | grep "FIXER_REASON"
     fi
@@ -164,7 +164,7 @@ else
     echo "✅ [COMMIT APROBADO] Código verificado por CrewAI + Agent Fixer Stage."
     
     # Save report to Obsidian (si está configurado)
-    if [ -n "$OBSIDIAN_VAULT" ] && [ -d "$OBSIDIAN_VAULT" ]; then
+    if [[ -n "$OBSIDIAN_VAULT" ]] && [[ -d "$OBSIDIAN_VAULT" ]]; then
         OBSIDIAN_FILE="$OBSIDIAN_VAULT/git_safety_$(git rev-parse --abbrev-ref HEAD)_${TIMESTAMP}.md"
         cat > "$OBSIDIAN_FILE" << OBSHEADER
 ---
