@@ -10,20 +10,19 @@ Todas las operaciones de filesystem deben pasar por estas validaciones
 antes de construir rutas o acceder a archivos. Resuelve:
   - pythonsecurity:S8707 (LLM path traversal)
   - python:S5443 (publicly writable directories)
+  - pythonsecurity:S8705 (shell argument injection)
 """
 
 import os
 import re
-import shutil
-import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 
 # ── Directorios del sistema que NUNCA deben ser objetivo de escritura ─────────
 # Nota: /home NO está aquí porque es un directorio legítimo de usuario.
 # La validación real es contra base_dir (path traversal), no contra un blacklist.
-_SYSTEM_FORBIDDEN = [
+_SYSTEM_FORBIDDEN: list[str] = [
     "/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/dev", "/proc", "/sys",
     "/root",
 ]
@@ -37,7 +36,11 @@ def _is_system_path(resolved: str) -> bool:
     return False
 
 
-def validate_path(user_path: str, base_dir: str = None, must_exist: bool = False) -> Path:
+def validate_path(
+    user_path: str,
+    base_dir: Optional[Union[str, Path]] = None,
+    must_exist: bool = False,
+) -> Path:
     """
     Valida una ruta de filesystem para prevenir path traversal.
 
@@ -57,21 +60,21 @@ def validate_path(user_path: str, base_dir: str = None, must_exist: bool = False
         raise ValueError("Path cannot be empty")
 
     # Rechazar patrones obvios de traversal
-    dangerous_patterns = ["..", "//", "\\\\", "\0"]
+    dangerous_patterns: list[str] = ["..", "//", "\\\\", "\0"]
     for pattern in dangerous_patterns:
         if pattern in user_path:
             raise ValueError(f"Path contains forbidden pattern: {pattern!r}")
 
     # Resolver ruta absoluta
-    resolved = Path(user_path).resolve()
+    resolved: Path = Path(user_path).resolve()
 
     # Comprobar que no escapa a directorios de sistema
     if _is_system_path(str(resolved)):
         raise ValueError(f"Path escapes to system directory: {resolved}")
 
     # Si hay base_dir, la ruta debe quedar dentro
-    if base_dir:
-        resolved_base = Path(base_dir).resolve()
+    if base_dir is not None:
+        resolved_base: Path = Path(base_dir).resolve()
         try:
             resolved.relative_to(resolved_base)
         except ValueError:
@@ -101,19 +104,16 @@ def get_safe_output_dir(prefix: str = "crew_output") -> str:
     Returns:
         Ruta absoluta al directorio de output
     """
-    xdg_data = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
-    base = Path(xdg_data) / "hermes-crew-hybrid"
+    xdg_data: str = os.getenv("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    base: Path = Path(xdg_data) / "hermes-crew-hybrid"
     base.mkdir(parents=True, exist_ok=True)
 
     # Verificar permisos: solo el dueño debe tener write
-    stat_info = base.stat()
-    mode = stat_info.st_mode
-    # Comprobar que group y other NO tienen write
+    mode: int = base.stat().st_mode
     if mode & 0o022:
-        # Quitar permisos de escritura group/other
         base.chmod(mode & ~0o022)
 
-    output_dir = base / f"{prefix}_{os.getpid()}"
+    output_dir: Path = base / f"{prefix}_{os.getpid()}"
     output_dir.mkdir(exist_ok=True)
     return str(output_dir)
 
@@ -130,15 +130,16 @@ def get_safe_script_path(prefix: str = "crew") -> str:
     Returns:
         Ruta absoluta al script temporal
     """
-    output_dir = get_safe_output_dir(prefix=prefix)
+    output_dir: str = get_safe_output_dir(prefix=prefix)
     return str(Path(output_dir) / f"{prefix}_{os.getpid()}.py")
 
 
 # ── Validación de entrada para comandos shell ────────────────────────────────
 
-_SHELL_DANGEROUS = re.compile(
-    r'[;&|`$\(\)\{\}\[\]<>!\n\r\\]'
+_SHELL_DANGEROUS: re.Pattern[str] = re.compile(
+    r'[;&|`$\(\)\{\}\[\]<>\!\n\r\\]'
 )
+
 
 def sanitize_shell_arg(value: str, max_length: int = 256) -> str:
     """

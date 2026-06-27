@@ -27,4 +27,4 @@ jobs:
           pip install crewai crewai-tools litellm pytest pytest-cov
 
       - name: Run tests
-        run: python -m pytest test_*.py -v --tb=short
+        run: python -m pytest test_*.py -v --tb=short --cov=. --cov-report=term-missing --cov-report=xml

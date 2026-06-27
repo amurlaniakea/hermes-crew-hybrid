@@ -17,40 +17,44 @@ Configuración LLM: Ollama local (modelo configurable)
 import json
 import subprocess
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Configuración del modelo Ollama
 # ────────────────────────────────────────────────────────────────────────────
-# Lee de .env si existe, sino usa defaults
-from pathlib import Path
 
-_env_file = Path(__file__).parent / ".env"
+_env_file: Path = Path(__file__).parent / ".env"
 if _env_file.exists():
-    for line in _env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip())
+    for _line in _env_file.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _value = _line.split("=", 1)
+            os.environ.setdefault(_key.strip(), _value.strip())
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "batiai/gemma4-e2b:q4")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "batiai/gemma4-e2b:q4")
+OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LITELLM_MODEL: str = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
+HERMES_CREW_VENV: str = os.getenv("HERMES_CREW_VENV", "/home/sil/mcp-core-defense/venv/bin/python3")
 
-# Formato LiteLLM: ollama/model_name, openai/model_name, anthropic/model_name, etc.
-# El operador puede usar cualquier proveedor soportado por LiteLLM
-LITELLM_MODEL = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
-
-# Paths dinámicos — desde variables de entorno (portability)
-HERMES_CREW_VENV = os.getenv("HERMES_CREW_VENV", "/home/sil/mcp-core-defense/venv/bin/python3")
+# Mapeo de nombres de herramientas a clases CrewAI
+TOOL_CLASS_MAP: dict[str, str] = {
+    "web_search": "WebSearchTool",
+    "file_read": "FileReadTool",
+    "file_write": "FileWriteTool",
+    "obsidian_search": "ObsidianSearchTool",
+    "obsidian_read": "ObsidianReadTool",
+}
 
 
 # ────────────────────────────────────────────────────────────────────────────
 # Template del script CrewAI
 # ────────────────────────────────────────────────────────────────────────────
 
-CREW_SCRIPT_TEMPLATE = '''#!/usr/bin/env python3
+CREW_SCRIPT_TEMPLATE: str = '''#!/usr/bin/env python3
 """Auto-generated crew script — {timestamp}"""
 import os
 import sys
@@ -63,7 +67,6 @@ os.environ["OPENAI_API_KEY"] = "ollama"
 from crewai import Agent, Task, Crew, LLM
 
 # Create LLM — supports both Ollama direct and LiteLLM
-# Model format: ollama/model_name (CrewAI uses LiteLLM internally)
 llm = LLM(model="{litellm_model}", base_url="{ollama_base_url}")
 
 # Import tools if needed
@@ -99,81 +102,90 @@ print("[CREW] Done. Output written to " + output_path)
 # Selección de modo de ejecución
 # ────────────────────────────────────────────────────────────────────────────
 
-def _determine_execution_mode(preferred: str, repo_path: str = None) -> str:
-    """
-    Determina el modo de ejecución basado en recursos y contexto.
-    
-    Lógica:
-    1. Si mode es "venv" o "docker" explícitamente → usar ese
-    2. Si mode es "auto":
-       a. Verificar RAM disponible (mínimo 2GB para Docker)
-       b. Verificar si Docker está disponible y la imagen existe
-       c. Verificar si CrewAI está instalado en venv
-       d. Si el repo tiene remotos compartidos → Docker (seguro)
-       e. Si el repo es local/personal → venv (rápido)
-       f. Fallback: venv
-    """
-    if preferred in ("venv", "docker"):
-        return preferred
-    
-    # Check RAM
-    ram_ok = True
+def _check_ram_available() -> bool:
+    """Verifica si hay al menos 2GB de RAM disponible."""
     try:
         with open("/proc/meminfo") as f:
             for line in f:
                 if "MemAvailable" in line:
-                    ram_ok = int(line.split()[1]) > 2_000_000
-                    break
+                    return int(line.split()[1]) > 2_000_000
     except Exception:
         pass
-    
-    # Check Docker
-    docker_ok = False
+    return True
+
+
+def _check_docker_available() -> bool:
+    """Verifica si Docker está disponible y la imagen existe."""
     try:
         dc = subprocess.run(["docker", "info"], capture_output=True, timeout=5)
         if dc.returncode == 0:
-            img = subprocess.run(["docker", "images", "-q", "hermes-crew:latest"], capture_output=True, text=True, timeout=5)
-            docker_ok = img.stdout.strip() != ""
+            img = subprocess.run(
+                ["docker", "images", "-q", "hermes-crew:latest"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return img.stdout.strip() != ""
     except Exception:
         pass
-    
-    # Check venv
-    venv_ok = False
+    return False
+
+
+def _check_venv_available() -> bool:
+    """Verifica si CrewAI está instalado en el venv local."""
     try:
         vp = HERMES_CREW_VENV
         if Path(vp).exists():
-            ck = subprocess.run([vp, "-c", "import crewai; print('ok')"], capture_output=True, text=True, timeout=10)
-            venv_ok = ck.returncode == 0
+            ck = subprocess.run(
+                [vp, "-c", "import crewai; print('ok')"],
+                capture_output=True, text=True, timeout=10,
+            )
+            return ck.returncode == 0
     except Exception:
         pass
-    
-    # Check if repo has shared remotes (collaborative repo → Docker for safety)
-    repo_is_shared = False
-    if repo_path and Path(repo_path).exists():
-        try:
-            remotes = subprocess.run(
-                ["git", "-C", repo_path, "remote", "-v"],
-                capture_output=True, text=True, timeout=3  # Timeout corto
-            )
-            # If repo has remotes (origin, upstream, etc.), it's shared
-            repo_is_shared = len(remotes.stdout.strip().split("\n")) > 0
-        except subprocess.TimeoutExpired:
-            pass  # Si tarda mucho, asumir que no es compartido
-        except Exception:
-            pass
-    
-    # Decision
-    if repo_is_shared and docker_ok:
-        return "docker"  # Shared repo → maximum isolation
-    elif docker_ok and ram_ok:
-        return "docker"  # Docker available and enough RAM
-    elif venv_ok:
-        return "venv"  # Fallback to venv
-    elif docker_ok:
-        return "docker"  # Docker available but low RAM
-    else:
-        return "venv"  # Last resort
+    return False
 
+
+def _check_repo_is_shared(repo_path: Optional[str]) -> bool:
+    """Verifica si el repo tiene remotos (repo compartido -> Docker)."""
+    if not repo_path or not Path(repo_path).exists():
+        return False
+    try:
+        remotes = subprocess.run(
+            ["git", "-C", repo_path, "remote", "-v"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return len(remotes.stdout.strip().split("\n")) > 0
+    except Exception:
+        return False
+
+
+def _determine_execution_mode(preferred: str, repo_path: Optional[str] = None) -> str:
+    """
+    Determina el modo de ejecución basado en recursos y contexto.
+
+    Returns: "venv" o "docker"
+    """
+    if preferred in ("venv", "docker"):
+        return preferred
+
+    ram_ok = _check_ram_available()
+    docker_ok = _check_docker_available()
+    venv_ok = _check_venv_available()
+    repo_shared = _check_repo_is_shared(repo_path)
+
+    if repo_shared and docker_ok:
+        return "docker"
+    if docker_ok and ram_ok:
+        return "docker"
+    if venv_ok:
+        return "venv"
+    if docker_ok:
+        return "docker"
+    return "venv"
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Ejecución
+# ────────────────────────────────────────────────────────────────────────────
 
 def _execute_in_venv(script_path: str, output_dir: str, timeout: int) -> dict:
     """Ejecuta el script de CrewAI en el venv local con output sin buffer."""
@@ -184,7 +196,7 @@ def _execute_in_venv(script_path: str, output_dir: str, timeout: int) -> dict:
     result = subprocess.run(
         [HERMES_CREW_VENV, "-u", str(safe_script)],
         capture_output=True, text=True, timeout=timeout,
-        cwd=output_dir, env=env
+        cwd=output_dir, env=env,
     )
     return {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
 
@@ -196,128 +208,111 @@ def _execute_in_docker(script_path: str, output_dir: str, timeout: int) -> dict:
          "-v", f"{script_path}:/crew.py:ro", "-v", f"{output_dir}:/output",
          "--network", "none", "--memory", "512m", "--cpus", "1.0", "--read-only",
          "hermes-crew:latest", "python", "/crew.py"],
-        capture_output=True, text=True, timeout=timeout
+        capture_output=True, text=True, timeout=timeout,
     )
     return {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
 
 
+def _run_crew_script(script_path: str, output_dir: str, timeout: int, mode: str) -> dict:
+    """Ejecuta el script en el modo seleccionado."""
+    if mode == "docker":
+        return _execute_in_docker(script_path, output_dir, timeout)
+    return _execute_in_venv(script_path, output_dir, timeout)
+
+
 # ────────────────────────────────────────────────────────────────────────────
-# Función principal
+# Preparación del script CrewAI
 # ────────────────────────────────────────────────────────────────────────────
 
-def invoke_crew_task(
-    task: str,
-    crew: list,
-    scope: str,
-    output_dir: str = None,
-    timeout: int = 300,
-    cleanup: bool = True,
-    mode: str = "auto",
-    repo_path: str = None,
-) -> dict:
-    """
-    Invoca una micro-tripulación de CrewAI.
-    
-    Args:
-        task: Descripción de la tarea principal
-        crew: Lista de dicts con role, goal, tools para cada agente
-        scope: Scope original (para el Agent Fixer Stage)
-        output_dir: Directorio de output (default: /tmp/crew_output_{pid})
-        timeout: Timeout en segundos (default: 300)
-        cleanup: Si True, elimina archivos temporales
-        mode: "auto", "venv", "docker"
-        repo_path: Path al repo Git (para detectar si es compartido)
-    
-    Returns:
-        dict con status, execution_mode, raw_output, security, output_file, duration_seconds, crew_size
-    """
-    start_time = datetime.now()
-    
-    # ── Usar directorio seguro en vez de /tmp (S5443 + S8707) ──
-    from path_validator import validate_path, get_safe_output_dir, get_safe_script_path
-    if output_dir is None:
-        output_dir = get_safe_output_dir()
-    else:
-        output_dir = str(validate_path(output_dir))
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # ── MCP Core Defense: Auditar herramientas antes de ejecutar ──────────────
-    mcp_audit_result = None
+def _audit_tools(crew: list[dict]) -> Optional[dict]:
+    """Audita las herramientas del crew con MCP Core Defense."""
     try:
         from mcp_tool_auditor import MCPToolAuditor
         auditor = MCPToolAuditor(sensitivity="medium")
-        
-        # Recolectar todas las herramientas del crew
-        all_tools = []
+
+        all_tools: list[dict] = []
         for member in crew:
-            tools = member.get("tools", [])
-            for tool in tools:
+            for tool in member.get("tools", []):
                 if isinstance(tool, str):
                     all_tools.append({"name": tool, "description": ""})
                 elif isinstance(tool, dict):
                     all_tools.append(tool)
-        
-        if all_tools:
-            mcp_audit_result = auditor.audit_tools_list(all_tools)
-            if not mcp_audit_result["all_safe"]:
-                print(f"[MCP AUDIT] {mcp_audit_result['tools_rejected']} tools rejected!")
-                for r in mcp_audit_result["results"]:
-                    if not r["safe"]:
-                        print(f"  ✗ {r['tool_name']}: {r['reason']}")
+
+        if not all_tools:
+            return None
+
+        audit_result = auditor.audit_tools_list(all_tools)
+        if not audit_result["all_safe"]:
+            print(f"[MCP AUDIT] {audit_result['tools_rejected']} tools rejected!")
+            for r in audit_result["results"]:
+                if not r["safe"]:
+                    print(f"  ✗ {r['tool_name']}: {r['reason']}")
+        return audit_result
     except Exception as e:
         print(f"[MCP AUDIT] Error: {e}")
-    
-    # Generar script CrewAI con el LLM embebido y herramientas reales
-    agents_def, tasks_def, agents_list, tools_import_lines, tasks_list = [], [], [], [], []
-    
-    # Mapeo de nombres de herramientas a clases
-    tool_class_map = {
-        "web_search": "WebSearchTool",
-        "file_read": "FileReadTool", 
-        "file_write": "FileWriteTool",
-        "obsidian_search": "ObsidianSearchTool",
-        "obsidian_read": "ObsidianReadTool",
-    }
-    
-    # Generar imports de herramientas usadas
-    all_tool_classes = set()
+        return None
+
+
+def _collect_tool_imports(crew: list[dict]) -> str:
+    """Genera las líneas de import de herramientas CrewAI."""
+    all_tool_classes: set[str] = set()
     for member in crew:
         for tool in member.get("tools", []):
-            if isinstance(tool, str) and tool in tool_class_map:
-                all_tool_classes.add(tool_class_map[tool])
-    
+            if isinstance(tool, str) and tool in TOOL_CLASS_MAP:
+                all_tool_classes.add(TOOL_CLASS_MAP[tool])
+
     if all_tool_classes:
-        tools_import_lines.append("from crewai_tools import " + ", ".join(sorted(all_tool_classes)))
-    else:
-        tools_import_lines.append("# No tools imported")
-    
-    tools_import = "\n".join(tools_import_lines)
-    
-    # Generar agentes con herramientas instanciadas
+        return "from crewai_tools import " + ", ".join(sorted(all_tool_classes))
+    return "# No tools imported"
+
+
+def _build_agent_definitions(crew: list[dict]) -> tuple[list[str], list[str], list[str], list[str]]:
+    """
+    Genera las definiciones de agentes y tareas para el script.
+
+    Returns: (agents_def, tasks_def, agents_list, tasks_list)
+    """
+    agents_def: list[str] = []
+    tasks_def: list[str] = []
+    agents_list: list[str] = []
+    tasks_list: list[str] = []
+
     for i, member in enumerate(crew):
-        role = member["role"]
-        goal = member["goal"]
+        role: str = member["role"]
+        goal: str = member["goal"]
         tools = member.get("tools", [])
-        backstory = member.get("backstory", f"Expert {role}")
-        
-        # Generar lista de herramientas instanciadas
-        tool_instances = []
+        backstory: str = member.get("backstory", f"Expert {role}")
+
+        tool_instances: list[str] = []
         for tool in tools:
-            if isinstance(tool, str) and tool in tool_class_map:
-                tool_instances.append(f"{tool_class_map[tool]}()")
+            if isinstance(tool, str) and tool in TOOL_CLASS_MAP:
+                tool_instances.append(f"{TOOL_CLASS_MAP[tool]}()")
             elif isinstance(tool, dict):
-                # Herramienta personalizada
-                tool_name = tool.get("name", "unknown")
-                tool_instances.append(f"{tool_name}()")
-        
+                tool_instances.append(f"{tool.get('name', 'unknown')}()")
+
         tools_str = "[" + ", ".join(tool_instances) + "]" if tool_instances else "[]"
-        
-        agents_def.append(f'agent_{i} = Agent(role="{role}", goal="{goal}", backstory="{backstory}", tools={tools_str}, verbose=False, allow_delegation=False, llm=llm)')
+
+        agents_def.append(
+            f'agent_{i} = Agent(role="{role}", goal="{goal}", '
+            f'backstory="{backstory}", tools={tools_str}, '
+            f'verbose=False, allow_delegation=False, llm=llm)'
+        )
         agents_list.append(f"agent_{i}")
-        tasks_def.append(f'task_{i} = Task(description="{goal}", agent=agent_{i}, expected_output="Detailed result")')
+        tasks_def.append(
+            f'task_{i} = Task(description="{goal}", '
+            f'agent=agent_{i}, expected_output="Detailed result")'
+        )
         tasks_list.append(f"task_{i}")
-    
-    script = CREW_SCRIPT_TEMPLATE.format(
+
+    return agents_def, tasks_def, agents_list, tasks_list
+
+
+def _generate_crew_script(crew: list[dict], output_dir: str) -> str:
+    """Genera el script Python completo de CrewAI."""
+    agents_def, tasks_def, agents_list, tasks_list = _build_agent_definitions(crew)
+    tools_import = _collect_tool_imports(crew)
+
+    return CREW_SCRIPT_TEMPLATE.format(
         timestamp=datetime.now().isoformat(),
         ollama_model=OLLAMA_MODEL,
         ollama_base_url=OLLAMA_BASE_URL,
@@ -329,43 +324,35 @@ def invoke_crew_task(
         agents_list=", ".join(agents_list),
         tasks_list=", ".join(tasks_list),
     )
-    
-    script_path = get_safe_script_path()
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(script)
-    
-    # Determinar modo y ejecutar
-    effective_repo_path = repo_path or os.getcwd()
-    execution_mode = _determine_execution_mode(mode, repo_path=effective_repo_path)
-    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {effective_repo_path}")
-    
-    if execution_mode == "docker":
-        exec_result = _execute_in_docker(script_path, output_dir, timeout)
-    else:
-        exec_result = _execute_in_venv(script_path, output_dir, timeout)
-    
-    duration = (datetime.now() - start_time).total_seconds()
-    
-    # Leer output — validar path antes de acceder (S8707)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Post-procesado: lectura de output + seguridad
+# ────────────────────────────────────────────────────────────────────────────
+
+def _read_crew_output(output_dir: str, exec_result: dict) -> str:
+    """Lee el output del crew, validando paths ante traversal (S8707)."""
+    from path_validator import validate_path
+
     output_file = Path(output_dir) / "result.md"
-    raw_output = ""
     if output_file.exists():
-        validated_output = validate_path(str(output_file), base_dir=output_dir)
-        raw_output = validated_output.read_text(encoding="utf-8")
-    else:
-        raw_output = exec_result.get("stdout", "") + "\n" + exec_result.get("stderr", "")
-    
-    # Pasar por Agent Fixer Stage
-    security_result = None
+        validated = validate_path(str(output_file), base_dir=output_dir)
+        return validated.read_text(encoding="utf-8")
+
+    return exec_result.get("stdout", "") + "\n" + exec_result.get("stderr", "")
+
+
+def _apply_security_check(raw_output: str, scope: str) -> dict:
+    """Pasa el output por Agent Fixer Stage para detección de inyecciones."""
     try:
-        import sys as _sys
         _fixer_path = os.getenv("AGENT_FIXER_PATH", "/home/sil/agent-fixer-stage")
-        if _fixer_path not in _sys.path:
-            _sys.path.insert(0, _fixer_path)
+        if _fixer_path not in sys.path:
+            sys.path.insert(0, _fixer_path)
         from agent_fixer import AgentFixer
+
         fixer = AgentFixer(scope=scope, action="clean", mode="medium")
         fixer_result = fixer.check(raw_output)
-        security_result = {
+        return {
             "status": fixer_result.status.value,
             "score": fixer_result.score,
             "reason": fixer_result.reason,
@@ -374,14 +361,86 @@ def invoke_crew_task(
             "details": fixer_result.details,
         }
     except Exception as e:
-        security_result = {"status": "error", "error": str(e), "score": 0.0, "reason": str(e), "cleaned_output": raw_output, "layer": "none", "details": {}}
-    
+        return {
+            "status": "error", "error": str(e), "score": 0.0,
+            "reason": str(e), "cleaned_output": raw_output,
+            "layer": "none", "details": {},
+        }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Función principal (orquestador limpio)
+# ────────────────────────────────────────────────────────────────────────────
+
+def invoke_crew_task(
+    task: str,
+    crew: list[dict],
+    scope: str,
+    output_dir: Optional[str] = None,
+    timeout: int = 300,
+    cleanup: bool = True,
+    mode: str = "auto",
+    repo_path: Optional[str] = None,
+) -> dict:
+    """
+    Invoca una micro-tripulación de CrewAI.
+
+    Args:
+        task: Descripción de la tarea principal
+        crew: Lista de dicts con role, goal, tools para cada agente
+        scope: Scope original (para el Agent Fixer Stage)
+        output_dir: Directorio de output (default: seguro bajo XDG)
+        timeout: Timeout en segundos (default: 300)
+        cleanup: Si True, elimina archivos temporales
+        mode: "auto", "venv", "docker"
+        repo_path: Path al repo Git (para detectar si es compartido)
+
+    Returns:
+        dict con status, execution_mode, raw_output, security, output_file,
+        duration_seconds, crew_size
+    """
+    from path_validator import validate_path, get_safe_output_dir, get_safe_script_path
+
+    start_time = datetime.now()
+
+    # 1. Preparar directorio de output seguro
+    if output_dir is None:
+        output_dir = get_safe_output_dir()
+    else:
+        output_dir = str(validate_path(output_dir))
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 2. Auditar herramientas con MCP Core Defense
+    mcp_audit_result = _audit_tools(crew)
+
+    # 3. Generar script CrewAI
+    script = _generate_crew_script(crew, output_dir)
+    script_path = get_safe_script_path()
+    with open(script_path, "w", encoding="utf-8") as f:
+        f.write(script)
+
+    # 4. Determinar modo y ejecutar
+    effective_repo_path = repo_path or os.getcwd()
+    execution_mode = _determine_execution_mode(mode, repo_path=effective_repo_path)
+    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {effective_repo_path}")
+
+    exec_result = _run_crew_script(script_path, output_dir, timeout, execution_mode)
+    duration = (datetime.now() - start_time).total_seconds()
+
+    # 5. Leer output
+    raw_output = _read_crew_output(output_dir, exec_result)
+
+    # 6. Security check (Agent Fixer Stage)
+    security_result = _apply_security_check(raw_output, scope)
+
+    # 7. Limpieza
     if cleanup:
         try:
             os.remove(script_path)
         except OSError:
             pass
-    
+
+    output_file = Path(output_dir) / "result.md"
     return {
         "status": "success" if exec_result.get("returncode", 0) == 0 else "error",
         "execution_mode": execution_mode,
@@ -409,7 +468,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", default="auto", choices=["auto", "venv", "docker"])
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    
+
     result = invoke_crew_task(
         task=args.task,
         crew=json.loads(args.crew),
@@ -418,11 +477,16 @@ if __name__ == "__main__":
         timeout=args.timeout,
         mode=args.mode,
     )
-    
+
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
-        print(f"Status: {result['status']} | Mode: {result['execution_mode']} | Duration: {result['duration_seconds']}s")
+        status = result['status']
+        exec_mode = result['execution_mode']
+        dur = result['duration_seconds']
+        print(f"Status: {status} | Mode: {exec_mode} | Duration: {dur}s")
         if result['security']:
-            print(f"Security: {result['security']['status']} (score: {result['security']['score']:.2f})")
+            sec_status = result['security']['status']
+            sec_score = result['security']['score']
+            print(f"Security: {sec_status} (score: {sec_score:.2f})")
         print(f"\n{result['raw_output'][:500]}")
