@@ -4,7 +4,7 @@ LABEL maintainer="Pedro Sordo Martínez <amurlaniakea@gmail.com>"
 LABEL description="Isolated container for CrewAI micro-crews"
 
 # Instalar dependencias de CrewAI + crear directorios + usuario no-root
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --only-binary :all: \
     crewai \
     crewai-tools \
     langchain \

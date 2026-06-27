@@ -25,8 +25,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install crewai crewai-tools litellm pytest pytest-cov
+          python -m pip install --upgrade pip --only-binary :all:
+          pip install --only-binary :all: crewai crewai-tools litellm pytest pytest-cov
 
       - name: Run tests with coverage
         run: pytest test_*.py --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing

@@ -38,7 +38,7 @@ def _is_system_path(resolved: str) -> bool:
 
 def validate_path(
     user_path: str,
-    base_dir: Optional[Union[str, Path]] = None,
+    base_dir: str | Path | None = None,
     must_exist: bool = False,
 ) -> Path:
     """
