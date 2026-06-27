@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2026 Pedro Sordo Martínez <amurlaniakea@gmail.com>
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
-
 """
 Consolidación: CrewAI → Hermes → Obsidian.
 
@@ -17,7 +16,7 @@ import re
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -36,7 +35,7 @@ class CrewOutputParser:
     Este parser extrae solo el valor.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         # Patrones de ruido comunes en outputs de CrewAI
         self._noise_patterns = [
             r'Agent:\s*.*?\n',  # Mensajes entre agentes
@@ -114,7 +113,7 @@ class CrewOutputParser:
                 return line[:80]
         return "CrewAI Output"
     
-    def _extract_sections(self, text: str) -> list:
+    def _extract_sections(self, text: str) -> list[dict[str, str]]:
         """Extrae secciones (heading + contenido)."""
         sections = []
         current_heading = None
@@ -145,7 +144,7 @@ class CrewOutputParser:
         
         return sections
     
-    def _extract_key_findings(self, text: str) -> list:
+    def _extract_key_findings(self, text: str) -> list[str]:
         """Extrae hallazgos clave (líneas con bullets o numeradas)."""
         findings = []
         for line in text.split('\n'):
@@ -178,7 +177,7 @@ class ObsidianNoteGenerator:
     Genera notas en formato Obsidian (Markdown + frontmatter YAML).
     """
     
-    def __init__(self, vault_path: str = None):
+    def __init__(self, vault_path: Optional[str] = None) -> None:
         # Prioridad: parámetro > variable de entorno > default vacío
         if vault_path:
             self.vault_path = Path(vault_path)
@@ -190,10 +189,10 @@ class ObsidianNoteGenerator:
         
         # ── Validar path contra traversal (S8707 + S5443) ──
         from path_validator import validate_path
-        self.vault_path = validate_path(str(self.vault_path))
+        self.vault_path: Path = validate_path(str(self.vault_path))
         self.vault_path.mkdir(parents=True, exist_ok=True)
     
-    def generate_note(self, parsed_output: dict, tags: list = None, source: str = "crewai") -> str:
+    def generate_note(self, parsed_output: dict[str, Any], tags: Optional[list[str]] = None, source: str = "crewai") -> str:
         """
         Genera una nota de Obsidian a partir del output parseado.
         
@@ -262,7 +261,7 @@ class ObsidianNoteGenerator:
         
         return "\n".join(lines)
     
-    def save_note(self, content: str, filename: str, subfolder: str = None) -> str:
+    def save_note(self, content: str, filename: str, subfolder: Optional[str] = None) -> str:
         """
         Guarda la nota en el vault de Obsidian.
         
@@ -300,11 +299,11 @@ class ObsidianNoteGenerator:
 # ────────────────────────────────────────────────────────────────────────────
 
 def consolidate_crew_output(
-    crew_result: dict,
-    tags: list = None,
-    vault_path: str = None,
+    crew_result: dict[str, Any],
+    tags: Optional[list[str]] = None,
+    vault_path: Optional[str] = None,
     save: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """
     Función de consolidación: CrewAI → Hermes → Obsidian.
     

@@ -1,0 +1,4 @@
+# CODEOWNERS — Solo el propietario puede aprobar cambios
+# Cualquier cambio en cualquier archivo requiere aprobación de amurlaniakea
+
+*       @amurlaniakea
