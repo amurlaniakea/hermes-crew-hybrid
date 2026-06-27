@@ -7,13 +7,75 @@
 
 import pytest
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# Añadir paths
-sys.path.insert(0, "/home/sil/hermes-crew-hybrid")
-sys.path.insert(0, "/home/sil/agent-fixer-stage")
+# Añadir paths dinámicamente
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ── Mock Agent Fixer si no está disponible (para CI) ─────────────────────────
+# En CI, agent-fixer-stage no está instalado, así que我们需要 mockear
+# _FIXER_AVAILABLE y sus clases para que los tests funcionen.
+
+import security_gateway as _sg_module
+
+if not _sg_module._FIXER_AVAILABLE:
+    # Crear mocks de AgentFixer y FixerStatus
+    from enum import Enum
+
+    class MockFixerStatus(str, Enum):
+        PASS = "pass"
+        CLEAN = "clean"
+        REJECT = "reject"
+
+    class MockAgentFixer:
+        def __init__(self, *args, **kwargs):
+            self._sensitivity = kwargs.get("sensitivity", "medium")
+
+        def check(self, text: str):
+            result = MagicMock()
+            result.score = 0.0
+            result.reason = ""
+            result.cleaned_output = text
+            result.details = {}
+            result.layer = "mock"
+
+            # Simular detección básica cuando敏感性 es alta
+            text_lower = text.lower()
+
+            # Detectar patrones maliciosos obvios
+            malicious_patterns = [
+                "curl ", "wget ", "send all data", "evil.com",
+                "ignore previous", "ignore all previous",
+                "1gn0r3", "1mp0rt4nt",
+            ]
+
+            is_malicious = any(p in text_lower for p in malicious_patterns)
+
+            # Detectar leetspeak
+            leetspeak_chars = set("01345678")
+            has_leetspeak = any(c in leetspeak_chars for c in text if c.isascii())
+
+            if is_malicious:
+                result.status = MockFixerStatus.CLEAN
+                result.score = 0.8
+                result.reason = "Mock: malicious pattern detected"
+                result.cleaned_output = ""
+            elif has_leetspeak and self._sensitivity in ("high", "medium"):
+                result.status = MockFixerStatus.CLEAN
+                result.score = 0.5
+                result.reason = "Mock: potential obfuscation detected"
+            else:
+                result.status = MockFixerStatus.PASS
+
+            return result
+
+    # Inyectar mocks en el módulo
+    _sg_module.AgentFixer = MockAgentFixer
+    _sg_module.FixerStatus = MockFixerStatus
+    _sg_module._FIXER_AVAILABLE = True
 
 from security_gateway import SecurityGateway, process_crew_output
 
