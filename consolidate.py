@@ -95,12 +95,18 @@ class CrewOutputParser:
         cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
         return cleaned.strip()
     
+    # Límite de longitud para prevenir ReDoS (líneas >500 chars son anormales en headings)
+    _MAX_HEADING_LEN = 500
+
     def _extract_title(self, text: str) -> str:
         """Extrae el título del documento."""
-        # Buscar primer heading — regex segura (sin backtracking exponencial)
-        match = re.search(r'^#\s+([^\n]+)$', text, re.MULTILINE)
-        if match:
-            return match.group(1).strip()
+        # Buscar primer heading — regex segura (cuantificador lazy + límite de línea)
+        for line in text.split('\n'):
+            if len(line) > self._MAX_HEADING_LEN:
+                continue
+            match = re.match(r'^#\s+(.+?)$', line)
+            if match:
+                return match.group(1).strip()
         # Fallback: primera línea no vacía
         for line in text.split('\n'):
             line = line.strip()
@@ -115,7 +121,10 @@ class CrewOutputParser:
         current_content = []
         
         for line in text.split('\n'):
-            heading_match = re.match(r'^#{1,3}\s+([^\n]+)$', line)
+            if len(line) > self._MAX_HEADING_LEN:
+                current_content.append(line)
+                continue
+            heading_match = re.match(r'^#{1,3}\s+(.+?)$', line)
             if heading_match:
                 if current_heading:
                     sections.append({
