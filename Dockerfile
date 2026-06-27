@@ -5,8 +5,8 @@ LABEL description="Isolated container for CrewAI micro-crews"
 
 # Instalar dependencias de CrewAI + crear directorios + usuario no-root
 RUN pip install --no-cache-dir --only-binary :all: \
-    crewai==0.115.10 \
-    crewai-tools==0.115.10 \
+    crewai==1.15.1 \
+    crewai-tools==1.15.1 \
     litellm==1.90.0 \
  && mkdir -p /workspace /output \
  && useradd -m crewuser \
