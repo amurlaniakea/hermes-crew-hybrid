@@ -58,7 +58,9 @@ class TestValidatePath:
 
     def test_allow_tmp_path(self):
         """Permitir /tmp como path válido (la restricción S5443 se maneja en get_safe_output_dir)."""
-        result = validate_path("/tmp/test.txt")
+        # nosemgrep: python.security.path-traversal.insecure-path-construction
+        # nosemgrep: python.lang.security.audit.tempfile.tmp-insecure
+        result = validate_path("/tmp/test.txt")  # noqa: S5443
         assert "/tmp/test.txt" in str(result)
 
     def test_base_dir_enforcement(self):
@@ -133,7 +135,7 @@ class TestGetSafeOutputDir:
     def test_output_dir_not_in_tmp(self):
         """El directorio de output NO debe estar en /tmp."""
         output_dir = get_safe_output_dir()
-        assert not output_dir.startswith("/tmp"), f"Output dir in /tmp: {output_dir}"
+        assert not output_dir.startswith("/tmp"), f"Output dir in /tmp: {output_dir}"  # noqa: S5443
 
     def test_output_dir_under_xdg(self):
         """El directorio de output debe estar bajo XDG_DATA_HOME."""
@@ -160,4 +162,4 @@ class TestGetSafeScriptPath:
 
     def test_script_path_not_in_tmp(self):
         path = get_safe_script_path()
-        assert not path.startswith("/tmp"), f"Script path in /tmp: {path}"
+        assert not path.startswith("/tmp"), f"Script path in /tmp: {path}"  # noqa: S5443

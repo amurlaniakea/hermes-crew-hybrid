@@ -75,7 +75,8 @@ class MCPToolAuditor:
             return {"safe": False, "score": 1.0, "reason": f"Input validation failed: {e}", "tool_name": tool_name}
         
         try:
-            result = subprocess.run(
+            # Inputs sanitized via sanitize_shell_arg above (S8705 fix)
+            result = subprocess.run(  # noqa: pythonsecurity:S8705
                 [MCP_VENV_PYTHON, MCP_AUDIT_SCRIPT,
                  "--tool-name", safe_name,
                  "--tool-description", safe_desc,
