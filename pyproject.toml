@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-crew-hybrid"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hermes as Conductor + CrewAI micro-crews + 3 security layers + Code Safety pre-commit hook"
 readme = "README.md"
-license = {text = "AGPL-3.0-or-later"}
+license = "AGPL-3.0-or-later"
 authors = [
     {name = "Pedro Sordo Martínez", email = "amurlaniakea@gmail.com"},
 ]
@@ -24,8 +24,20 @@ dev = [
     "pytest-cov>=5.0.0",
 ]
 
+[tool.setuptools]
+packages = [
+    "invoke_crew_task", "consolidate", "security_gateway",
+    "mcp_tool_auditor", "crewai_tools", "git_safety_crew",
+    "path_validator",
+]
+py-modules = []
+
+[tool.setuptools.package-data]
+"*" = ["*.py"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["."]
+python_files = ["test_*.py"]
 addopts = "-v --tb=short"
 
 [tool.coverage.run]
