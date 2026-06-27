@@ -10,10 +10,10 @@ install: ## Install package in dev mode with all dev dependencies
 	pip install -e ".[dev]"
 
 test: ## Run all tests
-	python -m pytest tests/ -v --tb=short
+	python -m pytest test_*.py -v --tb=short
 
 test-verbose: ## Run tests with coverage report
-	python -m pytest tests/ -v --tb=long --cov=. --cov-report=term-missing
+	python -m pytest test_*.py -v --tb=long --cov=. --cov-report=term-missing
 
 lint: ## Run ruff linter
 	ruff check .
