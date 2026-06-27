@@ -42,28 +42,36 @@ if not _sg_module._FIXER_AVAILABLE:
             result.details = {}
             result.layer = "mock"
 
-            # Simular detección básica cuando敏感性 es alta
             text_lower = text.lower()
 
-            # Detectar patrones maliciosos obvios
+            # Detectar patrones maliciosos obvios pero no bulleted lists normales
             malicious_patterns = [
                 "curl ", "wget ", "send all data", "evil.com",
                 "ignore previous", "ignore all previous",
-                "1gn0r3", "1mp0rt4nt",
+                "1gn0r3", "1mp0rt4nt", "3xt3rnal", "s3rv3r",
+                "steal", "exfil", "/etc/passwd", "/etc/shadow",
             ]
 
             is_malicious = any(p in text_lower for p in malicious_patterns)
 
-            # Detectar leetspeak
-            leetspeak_chars = set("01345678")
-            has_leetspeak = any(c in leetspeak_chars for c in text if c.isascii())
+            # Detectar leetspeak real (sustitución deliberada de letras)
+            # Excluir: números en listas (1. 2. 3.), años, versiones
+            import re
+            # Leetspeak: letras reemplazadas por números en medio de palabras
+            leetspeak_words = re.findall(r'\b\w*[01345678]\w*\b', text)
+            # Filtrar números solos (1, 2, etc.) y listas numeradas
+            leetspeak_words = [w for w in leetspeak_words
+                              if not re.match(r'^\d+\.?$', w)
+                              and len(w) > 2
+                              and any(c.isalpha() for c in w)
+                              and any(c.isdigit() for c in w)]
 
             if is_malicious:
                 result.status = MockFixerStatus.CLEAN
                 result.score = 0.8
                 result.reason = "Mock: malicious pattern detected"
                 result.cleaned_output = ""
-            elif has_leetspeak and self._sensitivity in ("high", "medium"):
+            elif leetspeak_words and self._sensitivity in ("high", "medium"):
                 result.status = MockFixerStatus.CLEAN
                 result.score = 0.5
                 result.reason = "Mock: potential obfuscation detected"
