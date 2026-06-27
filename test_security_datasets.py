@@ -147,7 +147,7 @@ class TestShellInjectionAgainstCWE78:
 
         # Los metacaracteres que nuestro sanitizer bloquea
         our_blocked = set(";|&$`()\n")
-        found_chars = set(c for c in our_blocked if c in full_text)
+        found_chars = {c for c in our_blocked if c in full_text}
 
         assert len(found_chars) >= 2, (
             f"Expected >= 2 of our blocked metacharacters in CWE-78 snippets, "

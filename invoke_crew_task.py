@@ -422,7 +422,7 @@ def invoke_crew_task(
     # 4. Determinar modo y ejecutar
     effective_repo_path = repo_path or os.getcwd()
     execution_mode = _determine_execution_mode(mode, repo_path=effective_repo_path)
-    print(f"[CREW] Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {effective_repo_path}")
+    print(f"[CREW] Task: {task} | Mode: {execution_mode}, Model: {OLLAMA_MODEL}, Repo: {effective_repo_path}")
 
     exec_result = _run_crew_script(script_path, output_dir, timeout, execution_mode)
     duration = (datetime.now() - start_time).total_seconds()
