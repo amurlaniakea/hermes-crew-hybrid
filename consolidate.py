@@ -17,10 +17,17 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
-import fcntl
 import tempfile
+import shutil
+
+try:
+    import portalocker
+    HAS_PORTALOCKER = True
+except ImportError:
+    HAS_PORTALOCKER = False
 
 class FileLock:
+    """Bloqueo portable para prevenir colisiones de escritura en Obsidian."""
     """Bloqueo básico para prevenir colisiones de escritura en Obsidian."""
     def __init__(self, lock_path: str = "/tmp/hermes_crew_lock.lock"):
         self.lock_path = lock_path
@@ -28,12 +35,20 @@ class FileLock:
 
     def __enter__(self):
         self.fd = open(self.lock_path, "w")
-        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        if HAS_PORTALOCKER:
+            portalocker.lock(self.fd, portalocker.LOCK_EX)
+        else:
+            import fcntl
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
         return self
 
     def __exit__(self, *args):
         if self.fd:
-            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            if HAS_PORTALOCKER:
+                portalocker.unlock(self.fd)
+            else:
+                import fcntl
+                fcntl.flock(self.fd, fcntl.LOCK_UN)
             self.fd.close()
 
 
@@ -427,3 +442,25 @@ if __name__ == "__main__":
         print(f"\n--- Preview ---\n{result['note_content'][:500]}")
     else:
         print(f"❌ Error: {result['error']}")
+
+
+def atomic_write_note(destination_path: str, content: str, encoding: str = "utf-8"):
+    """Escritura atómica: tmp + fsync + os.replace (evita notas corruptas por lectura concurrente)."""
+    import os
+    import tempfile
+    dest = Path(destination_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(dest.parent), prefix=".tmp_")
+    try:
+        with open(tmp_path, "w", encoding=encoding) as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, str(dest))
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)

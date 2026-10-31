@@ -38,12 +38,15 @@ if _env_file.exists():
 OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "batiai/gemma4-e2b:q4")
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LITELLM_MODEL: str = os.getenv("LITELLM_MODEL", f"ollama/{OLLAMA_MODEL}")
-HERMES_CREW_VENV: str = os.getenv("HERMES_CREW_VENV")
-if not HERMES_CREW_VENV:
-    raise EnvironmentError(
-        "La variable de entorno HERMES_CREW_VENV debe estar definida. "
-        "No se permiten rutas hardcodeadas por seguridad."
-    )
+def _resolve_crew_venv():
+    import warnings
+    venv = os.getenv("HERMES_CREW_VENV")
+    if not venv:
+        warnings.warn("HERMES_CREW_VENV no definida: CrewAI en modo degradado (desactivado)", UserWarning)
+        return None, True
+    return venv, False
+
+HERMES_CREW_VENV, CREW_DEGRADED = _resolve_crew_venv()
 
 # Mapeo de nombres de herramientas a clases CrewAI
 TOOL_CLASS_MAP: dict[str, str] = {

@@ -48,8 +48,8 @@ _FIXER_PATH = _find_fixer_path()
 if _FIXER_PATH and _FIXER_PATH not in sys.path:
     try:
         file_stat = os.stat(_FIXER_PATH)
-        current_uid = os.getuid()
-        if file_stat.st_uid != current_uid:
+        current_uid = os.getuid() if hasattr(os, "getuid") else None
+        if hasattr(os, "getuid") and file_stat.st_uid != current_uid:
             raise PermissionError(f"El directorio {_FIXER_PATH} no pertenece al usuario actual (UID {current_uid}).")
         if file_stat.st_mode & stat.S_IWOTH:
             raise PermissionError(f"El directorio {_FIXER_PATH} tiene permisos de escritura para 'otros', riesgo de inyección.")

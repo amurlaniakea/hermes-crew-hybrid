@@ -9,3 +9,5 @@ crewai-tools==1.15.33
 litellm==1.106.6
 pytest==9.2.0
 pytest-cov==7.1.0
+
+portalocker>=2.7.0

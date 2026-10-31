@@ -24,14 +24,17 @@ from pathlib import Path
 from typing import Optional
 
 # Paths — desde variables de entorno (portable, nunca hardcodear)
-MCP_CORE_DEFENSE_PATH = os.getenv("MCP_CORE_DEFENSE_PATH")
-if not MCP_CORE_DEFENSE_PATH:
-    raise EnvironmentError(
-        "La variable de entorno MCP_CORE_DEFENSE_PATH debe estar definida. "
-        "No se permiten rutas hardcodeadas por seguridad."
-    )
-MCP_AUDIT_SCRIPT = os.path.join(MCP_CORE_DEFENSE_PATH, "scripts", "mcp_audit.py")
-MCP_VENV_PYTHON = os.path.join(MCP_CORE_DEFENSE_PATH, "venv", "bin", "python3")
+def _resolve_config():
+    import warnings
+    path = os.getenv("MCP_CORE_DEFENSE_PATH")
+    if not path:
+        warnings.warn("MCP_CORE_DEFENSE_PATH no definida: MCP Tool Auditor en modo degradado (desactivado)", UserWarning)
+        return None, None, True
+    audit_script = os.path.join(path, "scripts", "mcp_audit.py")
+    venv_python = os.path.join(path, "venv", "bin", "python3")
+    return audit_script, venv_python, False
+
+MCP_AUDIT_SCRIPT, MCP_VENV_PYTHON, MCP_DEGRADED = _resolve_config()
 
 
 class MCPToolAuditor:
