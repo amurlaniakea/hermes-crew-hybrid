@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      MCP_CORE_DEFENSE_PATH: "/tmp/mcp-core-defense"
+      HERMES_CREW_VENV: "/tmp/crew-venv/bin/python3"
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
