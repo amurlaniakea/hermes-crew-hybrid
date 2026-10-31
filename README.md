@@ -178,3 +178,71 @@ AGPL-3.0-or-later
 ---
 
 *Desarrollado por Pedro Sordo Martínez (OWL / Hermes Agent) — 2026*
+
+
+## Instalación
+
+```bash
+# Clonar repositorio
+git clone https://github.com/amurlaniakea/hermes-crew-hybrid.git
+cd hermes-crew-hybrid
+
+# Instalar dependencias (usar uv recomendado)
+uv venv
+uv pip install -r requirements.txt
+
+# O con pip tradicional
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
+pip install -r requirements.txt
+```
+
+## Configuración de Variables de Entorno
+
+Crear archivo `.env` basado en `.env.example`:
+
+```bash
+# Rutas obligatorias
+MCP_CORE_DEFENSE_PATH="/ruta/a/mcp-core-defense"
+HERMES_CREW_VENV="/ruta/a/venv/bin/python3"
+AGENT_FIXER_PATH="/ruta/a/agent-fixer-stage"
+
+# Configuración LLM (Ollama local)
+OLLAMA_MODEL="batiai/gemma4-e2b:q4"
+OLLAMA_BASE_URL="http://localhost:11434"
+
+# O usar LiteLLM para modelos cloud
+LITELLM_MODEL="ollama/batiai/gemma4-e2b:q4"
+# Alternativas: "openai/gpt-4", "anthropic/claude-3", "groq/llama-3"
+
+# Obsidian (opcional)
+OBSIDIAN_VAULT_PATH="/ruta/a/vault"
+```
+
+## Uso Básico
+
+```bash
+# Invocar micro-tripulación CrewAI
+python invoke_crew_task.py --task "Investigar vulnerabilidades recientes en Python"
+
+# Ejecutar en Docker aislado (más seguro)
+python invoke_crew_task.py --task "Analizar código" --mode docker
+
+# Instalar pre-commit hook para seguridad en commits
+cp pre-commit-hook.sh .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+## Troubleshooting
+
+- **Error: MCP_CORE_DEFENSE_PATH no definida**: Configurar variable en `.env`
+- **Error: agent-fixer-stage no encontrado**: Clonar proyecto externo y configurar `AGENT_FIXER_PATH`
+- **Tests fallan en CI**: Variables de entorno dummy ya configuradas en `.github/workflows/tests.yml`
+
+## Modo Degradado
+
+- Si `agent-fixer-stage` no está disponible, Security Gateway se deshabilita con warning
+- Si `mcp-core-defense` no está disponible, MCP Tool Auditor se deshabilita con warning
+- El sistema sigue funcionando pero con seguridad reducida
+- Logs claros indican qué capas están activas/inactivas
