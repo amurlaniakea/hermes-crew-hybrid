@@ -33,3 +33,18 @@ jobs:
 
       - name: Run tests with coverage
         run: pytest test_*.py --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing
+
+
+  lock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv lock --check
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t hermes-crew-test .
