@@ -13,6 +13,7 @@ Usa Agent Fixer Stage (v0.2.0) como motor de detección.
 import sys
 import json
 import os
+import stat
 from pathlib import Path
 from typing import Optional
 
@@ -45,7 +46,16 @@ def _find_fixer_path():
 
 _FIXER_PATH = _find_fixer_path()
 if _FIXER_PATH and _FIXER_PATH not in sys.path:
-    sys.path.insert(0, _FIXER_PATH)
+    try:
+        file_stat = os.stat(_FIXER_PATH)
+        current_uid = os.getuid()
+        if file_stat.st_uid != current_uid:
+            raise PermissionError(f"El directorio {_FIXER_PATH} no pertenece al usuario actual (UID {current_uid}).")
+        if file_stat.st_mode & stat.S_IWOTH:
+            raise PermissionError(f"El directorio {_FIXER_PATH} tiene permisos de escritura para 'otros', riesgo de inyección.")
+        sys.path.insert(0, _FIXER_PATH)
+    except OSError as e:
+        raise RuntimeError(f"Error de seguridad al validar el path del fixer: {e}")
 
 try:
     from agent_fixer import AgentFixer, FixerStatus

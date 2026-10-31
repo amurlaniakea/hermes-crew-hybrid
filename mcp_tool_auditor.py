@@ -24,7 +24,12 @@ from pathlib import Path
 from typing import Optional
 
 # Paths — desde variables de entorno (portable, nunca hardcodear)
-MCP_CORE_DEFENSE_PATH = os.getenv("MCP_CORE_DEFENSE_PATH", "/home/sil/mcp-core-defense")
+MCP_CORE_DEFENSE_PATH = os.getenv("MCP_CORE_DEFENSE_PATH")
+if not MCP_CORE_DEFENSE_PATH:
+    raise EnvironmentError(
+        "La variable de entorno MCP_CORE_DEFENSE_PATH debe estar definida. "
+        "No se permiten rutas hardcodeadas por seguridad."
+    )
 MCP_AUDIT_SCRIPT = os.path.join(MCP_CORE_DEFENSE_PATH, "scripts", "mcp_audit.py")
 MCP_VENV_PYTHON = os.path.join(MCP_CORE_DEFENSE_PATH, "venv", "bin", "python3")
 

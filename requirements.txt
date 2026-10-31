@@ -4,8 +4,8 @@
 #
 # Pinned dependencies for hermes-crew-hybrid CI
 
-crewai==1.15.1
-crewai-tools==1.15.1
-litellm==1.90.0
-pytest==9.1.1
+crewai==1.15.33
+crewai-tools==1.15.33
+litellm==1.106.6
+pytest==9.2.0
 pytest-cov==7.1.0
