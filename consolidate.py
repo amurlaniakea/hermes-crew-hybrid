@@ -17,6 +17,25 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+import fcntl
+import tempfile
+
+class FileLock:
+    """Bloqueo básico para prevenir colisiones de escritura en Obsidian."""
+    def __init__(self, lock_path: str = "/tmp/hermes_crew_lock.lock"):
+        self.lock_path = lock_path
+        self.fd = None
+
+    def __enter__(self):
+        self.fd = open(self.lock_path, "w")
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *args):
+        if self.fd:
+            fcntl.flock(self.fd, fcntl.LOCK_UN)
+            self.fd.close()
+
 
 
 # ────────────────────────────────────────────────────────────────────────────
